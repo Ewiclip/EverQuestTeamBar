@@ -40,13 +40,14 @@ Setup records a verified backup in `%LOCALAPPDATA%\TeamBar\install-backups`. It 
   -ExpectedInstallDirectory $installedDirectory -ConfirmBinaryRestore
 ```
 
-## Test beta update notices with an unsigned installer
+## Test in-app beta updates with an unsigned installer
 
-Use `-GitHubReleaseNotices -Channel beta` when publishing the app payload, then build its installer with `-Unsigned`. These builds check the public EverQuestTeamBar GitHub Releases page for newer numbered betas. Team Bar opens the release page on request. The user downloads and runs Setup manually.
+Use `-GitHubReleaseNotices -Channel beta` when publishing the app payload, then build its installer with `-Unsigned`. Team Bar checks the public EverQuestTeamBar repository for newer numbered prereleases. When the user accepts an update, Team Bar downloads the versioned installer and verifies its size and GitHub-provided SHA-256 digest before launching Setup.
 
-1. Build and install the baseline, for example `-Version 0.1.0-beta.4 -FileVersion 0.1.0.4`. In **Settings → Updates**, confirm the installed version.
-2. After the baseline is installed, build the next version, for example `0.1.0-beta.5` with file version `0.1.0.5`, using the same options. Push the matching tag `v0.1.0-beta.5`. Windows checks create a draft prerelease. Attach `TeamBar-0.1.0-beta.5-win-x64-Setup.exe` to that draft before publishing it as a prerelease.
-3. In the installed baseline, choose **Check for updates**, confirm it reports the newer version, then select **View release on GitHub**. After installing the update, check again to confirm the new version is current.
+1. Install a baseline built with in-app download support. The already-released beta.4 and beta.5 use **View release on GitHub** for the upgrade to that baseline.
+2. Build the next numbered beta with the same options. Push the matching tag, for example `v0.1.0-beta.7`. Windows checks create a draft prerelease. Attach the matching `TeamBar-0.1.0-beta.7-win-x64-Setup.exe` before publishing it.
+3. Open the baseline with automatic checks enabled. Choose **Skip this version**, then reopen Team Bar and confirm the skipped release stays quiet. A later version should prompt again.
+4. In **Settings → General → Updates**, choose **Check for updates** to revisit the skipped release. Choose **Download and install** and let Setup finish. Reopen Team Bar and confirm the installed version.
 
 ## Signed releases and automatic updates
 
@@ -59,7 +60,7 @@ Invoke Build-Installer.ps1 with the same payload, readiness file, ISCC and outpu
 1. In the public repository’s **Settings → Pages**, select **GitHub Actions** as the build source. The beta workflow deploys the entire Pages site. Use a site dedicated to this feed. [GitHub Pages workflow setup](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
 2. Append `updates/beta/` to the configured Pages site address. A project site normally uses `https://<owner>.github.io/<repository>/updates/beta/`. For a custom domain, use the address shown in Pages settings. Set `-ReleaseFeedBaseUrl` and `-DownloadBaseUrl` to this same address, including the trailing slash, and use `-Channel beta` for both build steps.
 3. Under **Settings → Secrets and variables → Actions → Variables**, set `BETA_MANIFEST_SIGNER_SHA256` to the metadata certificate fingerprint supplied to `-ReleaseManifestSignerSha256`. The workflow verifies existing signatures using this public fingerprint. Keep signing keys with the release signer.
-4. Push a numbered beta tag such as `v0.1.0-beta.1`. After the Windows checks pass, the workflow opens a draft prerelease for that tag. Attach the signed installer, `manifest.json`, and `manifest.json.p7s`, review the release notes, then publish it. The Pages feed serves the highest signed beta by semantic version. Installer-only prereleases use GitHub notices. Publishing a partial signed bundle fails the Pages check. Older installers remain available while their signed metadata is valid, so a client midway through an update can finish.
+4. Push a numbered beta tag such as `v0.1.0-beta.1`. After the Windows checks pass, the workflow opens a draft prerelease for that tag. Attach the signed installer, `manifest.json`, and `manifest.json.p7s`, review the release notes, then publish it. The Pages feed serves the highest signed beta by semantic version. Installer-only prereleases use the GitHub release channel. Publishing a partial signed bundle fails the Pages check. Older installers remain available while their signed metadata is valid, so a client midway through an update can finish.
 5. In **Actions → Publish verified beta update feed**, check that the `deploy` job succeeded. The manifest is served at `updates/beta/manifest.json`. For an existing release, running the workflow manually revalidates its assets. Metadata expires after seven days by default, with a maximum of 30 days. Publish a fresh signed release or renew its signed metadata before expiry.
 
 To verify the exact Pages files locally, run the staging command on Windows with the same independently configured fingerprint and the base site address. Use a new output directory for each run.

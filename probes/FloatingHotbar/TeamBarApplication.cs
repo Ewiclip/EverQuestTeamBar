@@ -44,7 +44,7 @@ internal sealed partial class TeamBarApplication : IDisposable
         this.preferences = preferences ?? new LocalUserSettingsStore(LocalUserSettingsStore.DefaultPath);
         createSetup = setupFactory ?? ((selectedProfile, selectedController) => new(selectedProfile, selectedController));
         menu = new();
-        menu.Items.Add("Open Team Bar", null, (_, _) => OpenSafely(ShowDefaultSetup));
+        menu.Items.Add("Open Team Bar", null, (_, _) => OpenSafely(() => Open([])));
         menu.Items.Add(layoutMenu);
         layoutMenu.DropDownItems.Add(layoutSeparator);
         layoutMenu.DropDownItems.Add("Edit layouts…", null, (_, _) => OpenSafely(EditLayouts));
@@ -68,7 +68,7 @@ internal sealed partial class TeamBarApplication : IDisposable
         menu.Items.Add(new F.ToolStripSeparator());
         menu.Items.Add("Exit Team Bar", null, async (_, _) => await Exit());
         tray = new() { Icon = AppBranding.TrayIcon, Text = "Team Bar", ContextMenuStrip = menu, Visible = true };
-        tray.DoubleClick += (_, _) => OpenSafely(ShowDefaultSetup);
+        tray.DoubleClick += (_, _) => OpenSafely(() => Open([]));
         installerExit = InstallerExitSignal.Listen(app.Dispatcher, () => _ = Exit());
     }
     internal static int Run(string[] args)
@@ -92,6 +92,8 @@ internal sealed partial class TeamBarApplication : IDisposable
         using (host = new(app))
         {
             Current = host;
+            var updates = ReleaseUpdateCoordinator.Shared;
+            updates.PromptRequested += host.ShowUpdatePrompt;
             try
             {
                 host.MonitorLaunchSettings();
@@ -104,7 +106,11 @@ internal sealed partial class TeamBarApplication : IDisposable
                 app.Dispatcher.BeginInvoke(() => OpenSafely(host.RestoreSpellOverlays));
                 app.Run();
             }
-            finally { Current = null; }
+            finally
+            {
+                updates.PromptRequested -= host.ShowUpdatePrompt;
+                Current = null;
+            }
         }
         return 0;
     }
@@ -121,6 +127,17 @@ internal sealed partial class TeamBarApplication : IDisposable
         if (args.Length == 1 && args[0] == "--spell-overlays") ShowSpells();
         else if (args.Length == 1 && args[0] is "--items" or "--data-collection") ShowData();
         else ShowDefaultSetup();
+        // Covers both the first launch and shortcuts forwarded to a running tray instance.
+        application.Dispatcher.InvokeAsync(() =>
+        {
+            if (!exiting && !disposed) _ = ReleaseUpdateCoordinator.Shared.Check(manual: false, onOpen: true);
+        }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void ShowUpdatePrompt(string version)
+    {
+        if (!exiting && !disposed && !application.Dispatcher.HasShutdownStarted && installerExit?.IsRequested != true)
+            OpenSafely(() => ReleaseUpdatePrompt.Show(version));
     }
 
     private string ImportLabLayouts(string file)
@@ -238,6 +255,7 @@ internal sealed partial class TeamBarApplication : IDisposable
     {
         if (exiting) return;
         exiting = true;
+        ReleaseUpdateCoordinator.Shared.CancelDownload();
         bool shutdownCommitted = false;
         try
         {

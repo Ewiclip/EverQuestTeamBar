@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http;
-using System.Security.Cryptography;
 
 namespace TeamBar;
 
@@ -47,26 +46,8 @@ internal sealed class ReleaseUpdateClient
         try
         {
             using var response = await Send(Configuration.AllowedDownload(manifest.Installer.Url), cancellationToken).ConfigureAwait(false);
-            if (response.Content.Headers.ContentLength is { } length && length != manifest.Installer.Bytes)
-                throw new InvalidDataException("The update installer size does not match its signed manifest.");
-            await using (var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
             await using (var output = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
-            using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
-            {
-                byte[] buffer = new byte[81920]; long written = 0;
-                while (true)
-                {
-                    int count = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-                    if (count == 0) break;
-                    written += count;
-                    if (written > manifest.Installer.Bytes) throw new InvalidDataException("The update installer exceeded its signed size.");
-                    hash.AppendData(buffer, 0, count);
-                    await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
-                }
-                if (written != manifest.Installer.Bytes || !CryptographicOperations.FixedTimeEquals(hash.GetHashAndReset(), Convert.FromHexString(manifest.Installer.Sha256)))
-                    throw new InvalidDataException("The update installer is incomplete or its hash does not match.");
-                await output.FlushAsync(cancellationToken).ConfigureAwait(false);
-            }
+                await ReleaseInstallerFile.WriteVerified(response.Content, output, manifest.Installer.Bytes, manifest.Installer.Sha256, cancellationToken).ConfigureAwait(false);
             await Task.Run(() => verifier.VerifyInstaller(partial, manifest.Installer.PublisherSha256), cancellationToken).ConfigureAwait(false);
             File.Move(partial, destination);
             return destination;
@@ -83,11 +64,9 @@ internal sealed class ReleaseUpdateClient
     internal FileStream OpenVerifiedInstaller(string path, ReleaseUpdateManifest manifest)
     {
         manifest.Validate(Configuration, DateTimeOffset.UtcNow);
-        var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var locked = ReleaseInstallerFile.OpenVerified(path, manifest.Installer.Bytes, manifest.Installer.Sha256);
         try
         {
-            if (locked.Length != manifest.Installer.Bytes || !CryptographicOperations.FixedTimeEquals(SHA256.HashData(locked), Convert.FromHexString(manifest.Installer.Sha256)))
-                throw new InvalidDataException("The staged update changed after download. Check for updates again.");
             verifier.VerifyInstaller(path, manifest.Installer.PublisherSha256);
             return locked;
         }

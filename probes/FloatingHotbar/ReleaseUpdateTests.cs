@@ -184,7 +184,8 @@ internal static class ReleaseUpdateTests
         ReleaseUpdateHandoff.Apply(() => eligibilityChecks++, () => new MemoryStream(), () => { },
             () => launched = true, () => eligibilityChecks == 2);
         Check(eligibilityChecks == 2 && !launched, "A Setup request received during the last eligibility check also supersedes the queued update.");
-        await GitHubReleaseNoticesTests.Run(Check);
+        await GitHubReleaseNoticesTests.Run(Check, directory);
+        await ReleaseUpdateCoordinatorTests.Run(directory, Check);
         File.WriteAllText(Path.Combine(directory, "results.json"), JsonSerializer.Serialize(new { passed = true, checks = results.Count, results }, new JsonSerializerOptions { WriteIndented = true }));
     }
 

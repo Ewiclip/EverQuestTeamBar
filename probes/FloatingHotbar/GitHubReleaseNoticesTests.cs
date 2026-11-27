@@ -7,15 +7,16 @@ namespace TeamBar;
 
 internal static class GitHubReleaseNoticesTests
 {
-    internal static async Task Run(Action<bool, string> check)
+    internal static async Task Run(Action<bool, string> check, string directory)
     {
         static object Release(string version, string state = "uploaded", long size = 1024, bool draft = false,
-            bool prerelease = true, string? assetName = null) => new
+            bool prerelease = true, string? assetName = null, string? digest = null, string? url = null) => new
         {
             tag_name = "v" + version, draft, prerelease,
             html_url = "https://example.invalid/release",
             assets = new[] { new { name = assetName ?? $"TeamBar-{version}-win-x64-Setup.exe", state, size,
-                browser_download_url = "https://example.invalid/installer.exe" } }
+                digest = digest ?? ("sha256:" + new string('a', 64)),
+                browser_download_url = url ?? $"https://github.com/Ewiclip/EverQuestTeamBar/releases/download/v{version}/TeamBar-{version}-win-x64-Setup.exe" } }
         };
         static HttpResponseMessage Page(HttpRequestMessage request, object releases, bool more = false)
         {
@@ -68,9 +69,14 @@ internal static class GitHubReleaseNoticesTests
         check(await Fails(request => Page(request, new[] { Release("1.2.3-beta.8") }, more: true)) &&
             await Fails(request => Page(request, new string('x', 4 * 1024 * 1024))),
             "An oversized response or an unfinished page sequence cannot report a partial update result.");
+        check(await Fails(request => Page(request, new[] { Release("1.2.3-beta.8", digest: "sha256:bad") })) &&
+            await Fails(request => Page(request, new[] { Release("1.2.3-beta.8", size: ReleaseUpdateManifest.InstallerLimit + 1) })) &&
+            await Fails(request => Page(request, new[] { Release("1.2.3-beta.8", url: "https://example.invalid/setup.exe") })),
+            "The newest uploaded installer must have a valid GitHub digest, bounded size and exact repository download URL.");
+        await GitHubReleaseDownloadTests.Run(check, Path.Combine(directory, "github-download"));
     }
 
-    private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    internal sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) =>
             Task.FromResult(respond(request));

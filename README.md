@@ -4,7 +4,9 @@ Team Bar is a free Windows x64 desktop app for arranging EverQuest windows, floa
 
 ## Beta installers
 
-Published Windows betas have a versioned Setup executable attached to their release. In a beta with GitHub release notices enabled, open **Settings → General → Updates** and choose **Check for updates**. When a newer installer is available, **View release on GitHub** opens its download page. [GitHub Releases](https://github.com/Ewiclip/EverQuestTeamBar/releases)
+With automatic checks enabled, Team Bar checks for a newer beta each time you open the app. Choose **Download and install** to download the Windows x64 installer and start Setup. **Skip this version** pauses reminders until a newer beta appears. To install a skipped release, open **Settings → General → Updates** and choose **Check for updates**.
+
+If you are upgrading from beta.4 or beta.5, use **View release on GitHub** to download the newer installer once. [GitHub Releases](https://github.com/Ewiclip/EverQuestTeamBar/releases)
 
 ## Source and licensing
 

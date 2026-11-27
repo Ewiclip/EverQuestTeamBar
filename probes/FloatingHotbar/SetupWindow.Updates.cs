@@ -6,7 +6,7 @@ public partial class SetupWindow
 {
     private bool updatesLoaded, changingUpdateChoice;
 
-    private async void Updates_Loaded(object sender, W.RoutedEventArgs e)
+    private void Updates_Loaded(object sender, W.RoutedEventArgs e)
     {
         if (updatesLoaded) return;
         updatesLoaded = true;
@@ -21,7 +21,6 @@ public partial class SetupWindow
         updates.Changed += RefreshUpdates;
         Closed += (_, _) => updates.Changed -= RefreshUpdates;
         RefreshUpdates();
-        await updates.Check(manual: false);
     }
 
     private void RefreshUpdates()
@@ -39,10 +38,14 @@ public partial class SetupWindow
         finally { changingUpdateChoice = false; }
         AutoCheckUpdates.IsEnabled = updates.IsConfigured && !updates.Busy;
         CheckUpdatesButton.IsEnabled = updates.IsConfigured && !updates.Busy && !updates.IsQueued;
-        InstallUpdateButton.Visibility = InstallUpdateHint.Visibility = updates.CanInstallUpdates ? W.Visibility.Visible : W.Visibility.Collapsed;
-        InstallUpdateButton.IsEnabled = updates.Available is not null && !updates.Busy && !updates.IsQueued && TeamBarApplication.Current is not null;
-        OpenReleaseButton.Visibility = updates.Notice is not null ? W.Visibility.Visible : W.Visibility.Collapsed;
-        OpenReleaseButton.IsEnabled = !updates.Busy;
+        string? version = updates.AvailableVersion;
+        bool hasOffer = version is not null && !updates.IsQueued;
+        InstallUpdateButton.Visibility = hasOffer ? W.Visibility.Visible : W.Visibility.Collapsed;
+        SkipUpdateButton.Visibility = hasOffer && !updates.IsVersionSkipped(version!) ? W.Visibility.Visible : W.Visibility.Collapsed;
+        QueueUpdateButton.Visibility = hasOffer && updates.Available is not null ? W.Visibility.Visible : W.Visibility.Collapsed;
+        UpdateRequirements.Visibility = UpdateRequirements.Text.Length > 0 ? W.Visibility.Visible : W.Visibility.Collapsed;
+        UpdateReleaseNotes.Visibility = UpdateReleaseNotes.Text.Length > 0 ? W.Visibility.Visible : W.Visibility.Collapsed;
+        InstallUpdateButton.IsEnabled = SkipUpdateButton.IsEnabled = QueueUpdateButton.IsEnabled = !updates.Busy;
         CancelUpdateButton.Visibility = updates.IsQueued ? W.Visibility.Visible : W.Visibility.Collapsed;
         CancelUpdateButton.IsEnabled = !updates.Busy;
     }
@@ -50,13 +53,19 @@ public partial class SetupWindow
     private async void CheckUpdates_Click(object sender, W.RoutedEventArgs e)
     { if (!review) await ReleaseUpdateCoordinator.Shared.Check(manual: true); }
     private async void InstallUpdate_Click(object sender, W.RoutedEventArgs e)
-    { if (!review && TeamBarApplication.Current is not null) await ReleaseUpdateCoordinator.Shared.QueueForExit(); }
-    private void OpenRelease_Click(object sender, W.RoutedEventArgs e)
     {
-        if (review || ReleaseUpdateCoordinator.Shared is not { Busy: false, Notice: { } notice }) return;
-        try { using var browser = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(notice.ReleasePage.AbsoluteUri) { UseShellExecute = true }); }
-        catch (Exception error) { UpdateStatus.Text = "Could not open the release page. " + error.Message; }
+        var updates = ReleaseUpdateCoordinator.Shared;
+        if (!review && updates.AvailableVersion is { } version) await updates.InstallNow(version);
     }
+    private void SkipUpdate_Click(object sender, W.RoutedEventArgs e)
+    {
+        var updates = ReleaseUpdateCoordinator.Shared;
+        if (review || updates.AvailableVersion is not { } version) return;
+        try { updates.SkipVersion(version); }
+        catch (Exception error) { UpdateStatus.Text = "Could not save your choice. " + error.Message; }
+    }
+    private async void QueueUpdate_Click(object sender, W.RoutedEventArgs e)
+    { if (!review && TeamBarApplication.Current is not null) await ReleaseUpdateCoordinator.Shared.QueueForExit(); }
     private void CancelUpdate_Click(object sender, W.RoutedEventArgs e)
     { if (!review) ReleaseUpdateCoordinator.Shared.CancelQueued(); }
     private void AutoCheckUpdates_Changed(object sender, W.RoutedEventArgs e)
