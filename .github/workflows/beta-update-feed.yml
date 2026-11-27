@@ -1,0 +1,85 @@
+name: Publish verified beta update feed
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: team-bar-pages
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Verify the current beta release and prepare its static feed
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_BASE_URL: ${{ steps.pages.outputs.base_url }}
+          MANIFEST_SIGNER_SHA256: ${{ vars.BETA_MANIFEST_SIGNER_SHA256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:MANIFEST_SIGNER_SHA256 -notmatch '^[0-9a-f]{64}$') {
+              throw 'Set BETA_MANIFEST_SIGNER_SHA256 to the metadata certificate fingerprint pinned in the beta app.'
+          }
+          $json = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE) { throw 'Could not list the releases.' }
+          $pages = ($json -join "`n") | ConvertFrom-Json -NoEnumerate
+          $releases = foreach ($page in $pages) {
+              foreach ($release in $page) {
+                  if ($release.draft -or !$release.prerelease -or $release.tag_name -cnotmatch '^v(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?)\z') { continue }
+                  $version = $Matches[1]
+                  $parsed = $null
+                  if (![semver]::TryParse($version, [ref]$parsed) -or $parsed.ToString() -cne $version) { continue }
+                  $metadata = $release.assets | Where-Object name -CEQ 'manifest.json'
+                  [pscustomobject]@{ Tag = $release.tag_name; Version = $parsed; Manifest = $metadata }
+              }
+          }
+          $ordered = @($releases | Sort-Object Version -Descending)
+          if (!$ordered.Count) { throw 'Publish a tagged beta prerelease with a signed update bundle first.' }
+          $sources = @()
+          foreach ($release in $ordered) {
+              $current = $release.Tag -ceq $ordered[0].Tag
+              # Retain the immutable downloads referenced by still-valid older metadata.
+              if (!$current -and (!$release.Manifest -or [DateTimeOffset]$release.Manifest.updated_at -lt [DateTimeOffset]::UtcNow.AddDays(-31))) { continue }
+              $source = Join-Path $env:RUNNER_TEMP $release.Tag
+              $installer = "TeamBar-$($release.Version)-win-x64-Setup.exe"
+              gh release download $release.Tag --repo $env:GITHUB_REPOSITORY --dir $source -p manifest.json -p manifest.json.p7s -p $installer
+              if ($LASTEXITCODE) { throw "Could not download the signed assets for $($release.Tag)." }
+              $sources += $source
+          }
+          ./installer/Stage-BetaUpdateFeed.ps1 -Version $ordered[0].Version.ToString() -ReleaseDirectory $sources[0] `
+              -PreviousReleaseDirectories @($sources | Select-Object -Skip 1) -SiteBaseUrl $env:SITE_BASE_URL `
+              -ManifestSignerSha256 $env:MANIFEST_SIGNER_SHA256 -SiteDirectory (Join-Path $env:RUNNER_TEMP 'pages')
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/pages
+
+  deploy:
+    needs: stage
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Publish the verified feed
+        id: deploy
+        uses: actions/deploy-pages@v4

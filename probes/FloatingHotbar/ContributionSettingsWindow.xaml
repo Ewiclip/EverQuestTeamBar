@@ -1,0 +1,121 @@
+<Window x:Class="TeamBar.ContributionSettingsWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Data sharing" Width="870" Height="870" MinWidth="700" MinHeight="620"
+ Background="{DynamicResource AppBackground}" Foreground="{DynamicResource Text}" FontFamily="Segoe UI" FontSize="14"
+ WindowStartupLocation="CenterOwner" ShowInTaskbar="False" UseLayoutRounding="True">
+ <Window.Resources>
+  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+  <Style TargetType="TextBox"><Setter Property="Background" Value="{DynamicResource Field}"/><Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="Padding" Value="10,8"/></Style>
+  <Style TargetType="PasswordBox"><Setter Property="Background" Value="{DynamicResource Field}"/><Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="Padding" Value="10,8"/></Style>
+  <Style TargetType="CheckBox">
+   <Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+    <StackPanel Orientation="Horizontal"><Border x:Name="Box" Width="19" Height="19" CornerRadius="5" Background="{DynamicResource Field}" BorderBrush="{DynamicResource CheckBorder}" BorderThickness="1" Margin="0,0,10,0">
+     <TextBlock x:Name="Tick" Text="✓" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource OnAccent}" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Border><ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/></StackPanel>
+    <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="Tick" Property="Visibility" Value="Visible"/></Trigger>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="Box" Property="BorderThickness" Value="2"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ScrollBar">
+   <Setter Property="Width" Value="10"/><Setter Property="Background" Value="Transparent"/><Setter Property="MinWidth" Value="0"/><Setter Property="MinHeight" Value="0"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+    <Grid Background="Transparent"><Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="{TemplateBinding Orientation}">
+     <Track.DecreaseRepeatButton><RepeatButton x:Name="Before" Command="ScrollBar.PageUpCommand" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton>
+     <Track.Thumb><Thumb x:Name="Grip" MinHeight="24" Margin="2"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="Fill" Background="{DynamicResource Scrollbar}" CornerRadius="4"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource ScrollbarHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+     <Track.IncreaseRepeatButton><RepeatButton x:Name="After" Command="ScrollBar.PageDownCommand" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton>
+    </Track></Grid>
+    <ControlTemplate.Triggers><Trigger Property="Orientation" Value="Horizontal"><Setter Property="Width" Value="Auto"/><Setter Property="Height" Value="10"/><Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/><Setter TargetName="Grip" Property="MinHeight" Value="0"/><Setter TargetName="Grip" Property="MinWidth" Value="24"/><Setter TargetName="Before" Property="Command" Value="ScrollBar.PageLeftCommand"/><Setter TargetName="After" Property="Command" Value="ScrollBar.PageRightCommand"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="SharingTab" TargetType="TabItem"><Setter Property="Foreground" Value="{DynamicResource Muted}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem"><Border x:Name="TabBorder" Padding="16,12" BorderThickness="0,0,0,2" BorderBrush="{DynamicResource Line}"><ContentPresenter ContentSource="Header"/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="{DynamicResource Accent}"/><Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource SelectedSurface}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+ </Window.Resources>
+ <Grid Margin="24">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <StackPanel>
+   <TextBlock Text="Share game data" FontSize="26" FontWeight="SemiBold"/>
+   <TextBlock Text="Choose a destination, choose what to share, and check what arrived." Foreground="{DynamicResource Muted}" Margin="0,6,0,12"/>
+   <TextBlock x:Name="PreviewNotice" Text="Preview only: settings, credentials and uploads are disabled." Foreground="{DynamicResource WarningText}" Margin="0,0,0,10" Visibility="Collapsed"/>
+  </StackPanel>
+  <Grid Grid.Row="1" Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="240"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <StackPanel><Label Content="Destination" Target="{Binding ElementName=DestinationChoice}" Foreground="{DynamicResource Text}" Padding="0,0,0,5"/>
+    <ComboBox x:Name="DestinationChoice" DisplayMemberPath="Name" SelectedValuePath="Id" SelectionChanged="Destination_Changed" MinHeight="36" AutomationProperties.Name="Contribution destination"/>
+   </StackPanel>
+   <TextBlock Grid.Column="1" Text="Each destination remembers its own data choices, key, queue, and delivery history." Foreground="{DynamicResource Muted}" FontSize="12" Margin="18,22,0,0" VerticalAlignment="Center"/>
+  </Grid>
+  <TabControl x:Name="SharingTabs" Grid.Row="2" Background="{DynamicResource Surface}" BorderThickness="0" Padding="0">
+   <TabItem Header="Sharing settings" Style="{StaticResource SharingTab}"><ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid Margin="16,14,16,12"><Grid.ColumnDefinitions><ColumnDefinition Width="0.85*"/><ColumnDefinition Width="26"/><ColumnDefinition Width="1.15*"/></Grid.ColumnDefinitions><StackPanel>
+    <TextBlock Text="What to share" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,6"/>
+    <CheckBox Margin="0,3" x:Name="ItemsInput" Content="Items" AutomationProperties.Name="Share item definitions"/>
+    <TextBlock Text="Names, IDs, properties and intrinsic spell references." FontSize="12" Foreground="{DynamicResource Muted}" Margin="22,0,0,3"/>
+    <CheckBox Margin="0,3" x:Name="SpellsInput" Content="Spells" AutomationProperties.Name="Share spell definitions"/>
+    <TextBlock Text="Definitions and readable effects; no casters or timers." FontSize="12" Foreground="{DynamicResource Muted}" Margin="22,0,0,3"/>
+    <CheckBox Margin="0,3" x:Name="RecipesInput" Content="Recipes" AutomationProperties.Name="Share recipe observations"/>
+    <TextBlock Text="Trivial levels and loaded ingredients; partial evidence." FontSize="12" Foreground="{DynamicResource Muted}" Margin="22,0,0,3"/>
+    <CheckBox Margin="0,3" x:Name="NpcsInput" Content="NPCs" AutomationProperties.Name="Share observed NPCs"/>
+    <TextBlock Text="Selected NPC names, zones and levels." FontSize="12" Foreground="{DynamicResource Muted}" Margin="22,0,0,3"/>
+    <CheckBox Margin="0,3" x:Name="DropsInput" Content="Drops" AutomationProperties.Name="Share confirmed NPC drop sources"/>
+    <TextBlock Text="Verified corpse / item / zone associations." FontSize="12" Foreground="{DynamicResource Muted}" Margin="22,0,0,3"/>
+    <StackPanel Orientation="Horizontal">
+    <CheckBox Margin="0,3" x:Name="ForagedInput" Content="Foraged" AutomationProperties.Name="Share foraged item sources"/>
+    <CheckBox Margin="18,3,0,3" x:Name="FishedInput" Content="Fished" AutomationProperties.Name="Share fished item sources"/>
+    </StackPanel>
+    <TextBlock Text="New log successes matched to a verified zone. Requires /log on." FontSize="12" Foreground="{DynamicResource Muted}" Margin="22,0,0,3"/>
+    <TextBlock Text="New sources require an updated receiver. No personal data, kill counts or drop rates are shared." FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,8,0,8"/>
+    </StackPanel><Border Grid.Column="1" Width="1" Background="{DynamicResource Line}" Margin="0,0,0,8"/><StackPanel Grid.Column="2">
+    <TextBlock Text="Connection" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10"/>
+    <Label x:Name="EndpointLabel" Content="API endpoint" Target="{Binding ElementName=EndpointInput}" Foreground="{DynamicResource Text}" Padding="0,0,0,5"/>
+    <TextBox x:Name="EndpointInput" AutomationProperties.Name="Destination HTTPS API endpoint"/>
+    <TextBlock x:Name="EndpointHint" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,5,0,12"/>
+    <Label Content="API key" Target="{Binding ElementName=KeyInput}" Foreground="{DynamicResource Text}" Padding="0,0,0,5"/>
+    <PasswordBox x:Name="KeyInput" AutomationProperties.Name="Dedicated contribution API key"/>
+    <TextBlock x:Name="KeyHint" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,5,0,12"/>
+    <TextBlock Text="Keys are protected for your Windows user. The receiving website must support Team Bar's sharing format and return a receipt." FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,0,0,12"/>
+    <CheckBox x:Name="EnabledInput" Content="Enable sharing to this destination" FontWeight="SemiBold"/>
+    <TextBlock Text="Save to apply these choices. Unselected types stop uploading; any already queued records stay local until selected again." FontSize="12" Foreground="{DynamicResource Muted}" Margin="22,2,0,4"/>
+   </StackPanel></Grid></ScrollViewer></TabItem>
+   <TabItem Header="Recently shared" Style="{StaticResource SharingTab}"><Grid Margin="16,14,16,12">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel Margin="0,0,0,12"><TextBlock Text="Confirmed by the destination" FontSize="18" FontWeight="SemiBold"/>
+     <TextBlock Text="The latest 100 receipts, kept across restarts. Received means delivered, not necessarily approved or published." FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,5,0,0"/></StackPanel>
+    <ListView x:Name="RecentList" Grid.Row="1" SelectionChanged="Recent_Changed" Background="{DynamicResource Field}" Foreground="{DynamicResource Text}" BorderBrush="{DynamicResource Line}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Recently shared records">
+     <ListView.ItemTemplate><DataTemplate><Grid Margin="4,7"><Grid.ColumnDefinitions><ColumnDefinition Width="128"/><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions>
+      <TextBlock Text="{Binding When}" Foreground="{DynamicResource Muted}" FontSize="12"/>
+      <StackPanel Grid.Column="1" Margin="8,0"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Muted}" FontSize="11"/></StackPanel>
+      <TextBlock Grid.Column="2" Text="{Binding Result}" Foreground="{DynamicResource Accent}" FontSize="12"/>
+     </Grid></DataTemplate></ListView.ItemTemplate>
+     <ListView.ItemContainerStyle><Style TargetType="ListViewItem">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="10,8"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListViewItem">
+       <Border x:Name="Row" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" Padding="{TemplateBinding Padding}">
+        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+       </Border>
+       <ControlTemplate.Triggers>
+        <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="{DynamicResource SelectedSurface}"/><Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource SelectedBorder}"/></Trigger>
+        <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+       </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+     </Style></ListView.ItemContainerStyle>
+    </ListView>
+    <TextBlock x:Name="NoRecent" Grid.Row="1" Text="No confirmed shares for this connection yet. New receipts will appear here; older delivery totals cannot reconstruct individual records." Foreground="{DynamicResource Muted}" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="470" IsHitTestVisible="False"/>
+    <StackPanel Grid.Row="2" Margin="0,12,0,0"><TextBlock x:Name="ReceiptDetail" Text="Select a record to inspect the data that was shared." Foreground="{DynamicResource Muted}" FontSize="12"/>
+     <TextBox x:Name="SharedPayload" IsReadOnly="True" Height="150" FontFamily="Consolas" FontSize="12" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" Margin="0,6,0,0" AutomationProperties.Name="Shared data payload"/>
+    </StackPanel>
+   </Grid></TabItem>
+  </TabControl>
+  <StackPanel Grid.Row="3" Margin="0,14,0,0">
+   <Border Background="{DynamicResource Surface}" CornerRadius="8" Padding="12"><DockPanel>
+    <Button x:Name="RetryControl" DockPanel.Dock="Right" Content="Retry pending" Click="Retry_Click" VerticalAlignment="Center" Margin="16,0,0,0"/>
+    <StackPanel><TextBlock x:Name="UploadState" FontWeight="SemiBold"/><TextBlock x:Name="UploadDetail" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,5,0,0"/></StackPanel>
+   </DockPanel></Border>
+   <TextBlock x:Name="Issue" Foreground="{DynamicResource Error}" Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite"/>
+  </StackPanel>
+  <WrapPanel Grid.Row="4" HorizontalAlignment="Right" Margin="0,14,0,0">
+   <Button x:Name="ClearControl" Content="Disable and clear key" Click="Clear_Click" Margin="0,0,10,0"/>
+   <Button x:Name="SaveControl" Content="Save sharing settings" Click="Save_Click" Margin="0,0,10,0"/>
+   <Button Content="Close" Click="Close_Click" IsCancel="True"/>
+  </WrapPanel>
+ </Grid>
+</Window>

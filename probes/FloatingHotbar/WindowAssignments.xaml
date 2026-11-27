@@ -1,0 +1,57 @@
+<Window x:Class="TeamBar.WindowAssignments"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Team Bar · Assign game windows" Width="860" Height="760" MinWidth="740" MinHeight="520"
+ WindowStartupLocation="CenterOwner" Background="{DynamicResource AppBackground}" Foreground="{DynamicResource Text}"
+ FontFamily="Segoe UI" FontSize="14" UseLayoutRounding="True">
+ <Border x:Name="AssignmentRoot" Background="{DynamicResource AppBackground}"><Grid Margin="28">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <StackPanel>
+   <DockPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Refresh windows" Click="RefreshWindows_Click" Style="{DynamicResource Quiet}" Margin="0,0,8,0" ToolTip="Find opened or closed game windows while keeping entries for the same sessions."/><Button x:Name="IdentifyWindowsButton" Content="Identify windows" Click="IdentifyWindows_Click" ToolTip="Show matching numbers on visible game windows for eight seconds."/></StackPanel><TextBlock Text="Assign game windows" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/></DockPanel>
+   <TextBlock Text="Match your game windows to characters. No game-data memory reading is needed." Foreground="{DynamicResource Muted}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+   <TextBlock x:Name="IdentifyStatus" Text="Identify windows shows temporary numbers. Use a row’s Identify action for overlapping clients." Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+  </StackPanel>
+  <Border Grid.Row="1" Background="{DynamicResource WarningSurface}" CornerRadius="10" Padding="16" Margin="0,22,0,18">
+   <StackPanel>
+    <TextBlock Text="You choose the character and current class" Foreground="{DynamicResource WarningText}" FontWeight="SemiBold"/>
+    <TextBlock Text="These assignments last for this game session. Persona rules use the class you select. Assign again before clicking after switching characters or personas." Foreground="{DynamicResource WarningText}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+   </StackPanel>
+  </Border>
+  <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+   <StackPanel>
+    <TextBlock x:Name="WindowHint" Text="Choose a saved character or type a new name, then select the current class. Leave the name blank for windows you do not want to use." Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+    <ItemsControl x:Name="WindowRows">
+     <ItemsControl.ItemTemplate><DataTemplate>
+      <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+       <StackPanel>
+        <DockPanel>
+         <Button Content="Identify" DockPanel.Dock="Right" Style="{DynamicResource Quiet}" Click="IdentifyWindow_Click" ToolTip="Bring this game window forward without changing focus and show its number for eight seconds."/>
+         <Border DockPanel.Dock="Left" Background="{DynamicResource BrandSurface}" CornerRadius="7" MinWidth="38" Height="38" Margin="0,0,12,0"><TextBlock Text="{Binding Number}" FontSize="21" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" HorizontalAlignment="Center"/></Border>
+         <StackPanel VerticalAlignment="Center"><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding Heading}" FontWeight="SemiBold"/><TextBlock Text="{Binding ProcessLabel}" Foreground="{DynamicResource Muted}" FontSize="11" Margin="10,2,0,0"/></StackPanel><TextBlock Text="{Binding Label}" Foreground="{DynamicResource Muted}" FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
+        </DockPanel>
+        <Grid Margin="0,13,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="Character" Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,0,0,6"/>
+          <ComboBox ItemsSource="{Binding Characters}" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEditable="True" IsSynchronizedWithCurrentItem="False" AutomationProperties.Name="Character in this window"/>
+         </StackPanel>
+         <StackPanel Grid.Column="2"><TextBlock Text="Current class / persona" Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,0,0,6"/>
+          <ComboBox ItemsSource="{Binding Classes}" SelectedItem="{Binding Class, Mode=TwoWay}" AutomationProperties.Name="Current class in this window"/>
+         </StackPanel>
+        </Grid>
+        <TextBlock Text="{Binding Problem}" Foreground="{DynamicResource Error}" FontSize="12" TextWrapping="Wrap" Margin="0,9,0,0"><TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers><DataTrigger Binding="{Binding Problem}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+       </StackPanel>
+      </Border>
+     </DataTemplate></ItemsControl.ItemTemplate>
+    </ItemsControl>
+   </StackPanel>
+  </ScrollViewer>
+  <StackPanel Grid.Row="3" Margin="0,14,0,0">
+   <CheckBox x:Name="Confirmed" Content="I checked these characters and their active classes in the game." Margin="0,0,0,12" Foreground="{DynamicResource Text}" Checked="Confirmed_Changed" Unchecked="Confirmed_Changed"/>
+   <TextBlock x:Name="Feedback" Text="Window positions come from Windows. Character detection is separate from input compatibility." Foreground="{DynamicResource Muted}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,14"/>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <Button x:Name="AutomaticChoice" Content="Use automatic detection" HorizontalAlignment="Left" Style="{DynamicResource Quiet}" Click="Automatic_Click" ToolTipService.ShowOnDisabled="True"/>
+    <Button Grid.Column="1" Content="Cancel" Style="{DynamicResource Quiet}" Margin="0,0,12,0" Click="Cancel_Click"/>
+    <Button x:Name="UseAssignmentsButton" Grid.Column="2" Content="Use these assignments" Click="Use_Click" IsEnabled="False"/>
+   </Grid>
+  </StackPanel>
+ </Grid></Border>
+</Window>

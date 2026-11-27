@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>TeamBar</AssemblyName>
+    <Product>Team Bar</Product>
+    <ApplicationIcon>Assets\TeamBar.ico</ApplicationIcon>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Version Condition="'$(Version)' == ''">0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <DefineConstants>$(DefineConstants);TEAMBAR_APPLICATION</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TeamBarReleaseBuild)' == 'true'">
+    <DefineConstants>$(DefineConstants);TEAMBAR_PUBLIC_RELEASE</DefineConstants>
+    <TeamBarArtifactFlavor>team-bar</TeamBarArtifactFlavor>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+  <Target Name="ValidateSingleVersion" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(TeamBarEdition)' != ''" Text="Team Bar has one version. Remove TeamBarEdition from the build command; looping is no longer supported." />
+    <Error Condition="$([System.String]::Copy(';$(DefineConstants);').Contains(';LOOPING;'))" Text="The LOOPING build flag is no longer supported." />
+  </Target>
+  <ItemGroup>
+    <AssemblyMetadata Include="TeamBarArtifactFlavor" Value="$(TeamBarArtifactFlavor)" />
+    <AssemblyMetadata Include="ReleaseFeedBaseUrl" Value="$(ReleaseFeedBaseUrl)" />
+    <AssemblyMetadata Include="ReleaseManifestSignerSha256" Value="$(ReleaseManifestSignerSha256)" />
+    <AssemblyMetadata Include="ReleaseChannel" Value="$(ReleaseChannel)" />
+    <AssemblyMetadata Include="NativeBridgeHash" Value="$(NativeBridgeHash)" />
+    <AssemblyMetadata Include="NativeCollectorHash" Value="$(NativeCollectorHash)" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\ItemCollectorProbe\Models.cs" Link="ItemCollectorModels.cs" />
+    <Compile Include="..\ItemCollectorProbe\InventoryDecoder.cs" Link="InventoryDecoder.cs" />
+    <Compile Include="..\ItemCollectorProbe\RecipeDecoder.cs" Link="RecipeDecoder.cs" />
+    <Compile Include="..\ItemCollectorProbe\LiveRecipeDecoder.cs" Link="LiveRecipeDecoder.cs" />
+    <Compile Include="..\ItemCollectorProbe\LiveRecipeDecoderTests.cs" Link="LiveRecipeDecoderTests.cs" Condition="'$(TeamBarReleaseBuild)' != 'true'" />
+    <Compile Include="..\ItemCollectorProbe\BetaRecipeTests.cs" Link="BetaRecipeTests.cs" Condition="'$(TeamBarReleaseBuild)' != 'true'" />
+    <Compile Include="..\ItemCollectorProbe\ItemBuildDecoderTests.cs" Link="ItemBuildDecoderTests.cs" Condition="'$(TeamBarReleaseBuild)' != 'true'" />
+    <Compile Include="..\ItemCollectorProbe\ObservedSurfaceReader.cs" Link="ObservedSurfaceReader.cs" />
+    <Compile Include="..\ItemCollectorProbe\InspectionDecoder.cs" Link="InspectionDecoder.cs" />
+    <Compile Include="..\ItemCollectorProbe\MerchantDecoder.cs" Link="MerchantDecoder.cs" />
+    <Compile Include="..\ItemCollectorProbe\MerchantDecoderTests.cs" Link="MerchantDecoderTests.cs" Condition="'$(TeamBarReleaseBuild)' != 'true'" />
+    <Compile Include="..\ItemCollectorProbe\AdvancedLootDecoder.cs" Link="AdvancedLootDecoder.cs" />
+    <Compile Include="..\ItemCollectorProbe\LootContextDecoder.cs" Link="LootContextDecoder.cs" />
+    <Compile Include="..\ItemCollectorProbe\TargetDecoder.cs" Link="TargetDecoder.cs" />
+    <Compile Include="..\ItemCollectorProbe\TargetBuffDecoder.cs" Link="TargetBuffDecoder.cs" />
+    <Compile Include="..\ItemCollectorProbe\TargetLayoutResolver.cs" Link="TargetLayoutResolver.cs" />
+    <Compile Include="..\ItemCollectorProbe\TargetBuffDecoderTests.cs" Link="TargetBuffDecoderTests.cs" Condition="'$(TeamBarReleaseBuild)' != 'true'" />
+    <EmbeddedResource Include="..\ItemCollectorProbe\TargetPatterns.json" LogicalName="TeamBar.TargetPatterns.json" />
+    <Compile Include="..\ItemCollectorProbe\SpellNameCatalog.cs" Link="SpellNameCatalog.cs" />
+    <Compile Include="..\ItemCollectorProbe\InstalledSpellDescriptions.cs" Link="InstalledSpellDescriptions.cs" />
+    <Compile Include="..\ItemCollectorProbe\SurfaceDecoderTests.cs" Link="SurfaceDecoderTests.cs" Condition="'$(TeamBarReleaseBuild)' != 'true'" />
+    <Compile Include="..\ItemCollectorProbe\CollectorTests.cs" Link="CollectorTests.cs" Condition="'$(TeamBarReleaseBuild)' != 'true'" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="IdentityPatterns.json" LogicalName="TeamBar.IdentityPatterns.json" />
+    <EmbeddedResource Include="Assets\TeamBar.ico" LogicalName="TeamBar.Branding.Application.ico" />
+    <EmbeddedResource Include="Assets\ItemIconNames.tsv.gz" LogicalName="TeamBar.ItemIconNames.tsv.gz"
+                      Condition="Exists('Assets/ItemIconNames.tsv.gz') and '$(TeamBarIncludeItemIconNames)' != 'false'" />
+    <EmbeddedResource Include="Assets\TeamBarTray.ico" LogicalName="TeamBar.Branding.Tray.ico" />
+    <Using Include="System.IO" />
+    <Compile Include="..\IdentityProbe\MemoryReader.cs" Link="MemoryReader.cs" />
+    <None Update="buttons.json" CopyToOutputDirectory="PreserveNewest" Condition="'$(TeamBarReleaseBuild)' != 'true'" />
+    <None Update="team.json" CopyToOutputDirectory="PreserveNewest" Condition="'$(TeamBarReleaseBuild)' != 'true'" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TeamBarReleaseBuild)' == 'true'">
+    <Compile Remove="**/*Tests.cs;**/*Fixture.cs;SlidePreview.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,27 @@
+**/bin/
+**/obj/
+**/*_wpftmp.csproj
+artifacts/
+profiles/sessions/
+profiles/*.apply.lock
+profiles/*.bar-position.json
+profiles/*.windows.json
+profiles/buttons/*.lock
+profiles/buttons/*.bar-position.json
+profiles/*.screen-positions.json
+profiles/*.screen-positions.json.lock
+profiles/buttons/*.screen-positions.json
+profiles/**/sessions/
+profiles/**/*.apply.lock
+profiles/**/*.lock
+profiles/**/*.bar-position.json
+profiles/**/*.windows.json
+profiles/**/*.screen-positions.json
+profiles/*.initializing-*/
+tools/recipe-workbench/.local-*
+tools/recipe-workbench/.state-*.tmp
+tools/recipe-workbench/__pycache__/
+tools/recipe-workbench/exports/
+builds/
+# Personal libraries and character mappings belong to the local installation.
+/profiles/

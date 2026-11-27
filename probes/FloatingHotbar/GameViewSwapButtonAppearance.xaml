@@ -1,0 +1,17 @@
+<UserControl x:Class="TeamBar.GameViewSwapButtonAppearance"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <WrapPanel>
+  <StackPanel Margin="0,0,12,4">
+   <TextBlock Text="Button appearance" Style="{DynamicResource Hint}"/>
+   <ComboBox x:Name="StylePicker" MinWidth="148" AutomationProperties.Name="Swap button appearance"
+             DisplayMemberPath="Label" SelectedValuePath="Value" SelectionChanged="Style_Changed"/>
+  </StackPanel>
+  <StackPanel x:Name="TextOptions" Visibility="Collapsed" Margin="0,0,0,4">
+   <TextBlock Text="Button text" Style="{DynamicResource Hint}"/>
+   <TextBox x:Name="LabelField" MinWidth="180" AutomationProperties.Name="Swap button text"
+            KeyDown="Label_KeyDown" LostKeyboardFocus="Label_LostKeyboardFocus"/>
+   <TextBlock Style="{DynamicResource Hint}" Text="Include {character} to show each game’s name." TextWrapping="Wrap"/>
+  </StackPanel>
+ </WrapPanel>
+</UserControl>

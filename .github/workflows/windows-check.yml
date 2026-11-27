@@ -1,0 +1,46 @@
+name: Windows source checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  managed:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build the desktop project
+        run: dotnet build probes/FloatingHotbar/FloatingHotbar.csproj -c Release -o artifacts/checks/app
+      - name: Check layout geometry and migration
+        run: dotnet artifacts/checks/app/TeamBar.dll --game-view-layout-test artifacts/checks/layout.json
+      - name: Check update verification
+        run: dotnet artifacts/checks/app/TeamBar.dll --release-update-test artifacts/checks/updater
+      - name: Check icon selection without the optional item index
+        run: dotnet artifacts/checks/app/TeamBar.dll --button-icon-test artifacts/checks/icons.json
+      - name: Check profile migration
+        run: dotnet artifacts/checks/app/TeamBar.dll --profile-migration-test artifacts/checks/migration
+      - name: Check signed feed staging
+        shell: pwsh
+        run: ./installer/Test-BetaUpdateFeed.ps1 -OutputDirectory artifacts/checks/feed -SignedFixtureExecutable (Get-Command dotnet).Source
+
+  draft-beta:
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && contains(github.ref_name, '-beta.')
+    needs: managed
+    runs-on: windows-2025
+    permissions:
+      contents: write
+    steps:
+      - name: Open the beta release for review
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ($env:RELEASE_TAG -cnotmatch '^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)\z') { throw 'Expected a numbered beta tag.' }
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json url 2>$null
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          gh release create $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --verify-tag --draft --prerelease --generate-notes --title "Team Bar $env:RELEASE_TAG"
+          exit $LASTEXITCODE

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "characters": [
+    { "id": "runa", "name": "Runa" },
+    { "id": "fellwort", "name": "Fellwort" }
+  ],
+  "personas": [
+    { "id": "runa-current", "characterId": "runa", "class": null },
+    { "id": "fellwort-current", "characterId": "fellwort", "class": null },
+    { "id": "runa-cleric", "characterId": "runa", "class": "Cleric" },
+    { "id": "runa-shadowknight", "characterId": "runa", "class": "Shadowknight" }
+  ],
+  "buttons": [
+    {
+      "id": "split-action", "label": "Split action",
+      "rules": [
+        { "target": { "characterId": "runa" }, "key": "1" },
+        { "target": { "characterId": "fellwort" }, "key": "2" }
+      ]
+    },
+    {
+      "id": "invisibility", "label": "Invisibility",
+      "rules": [
+        { "target": { "characterId": "runa" }, "key": "5" },
+        { "target": { "characterId": "fellwort" }, "key": "5" }
+      ]
+    }
+  ]
+}

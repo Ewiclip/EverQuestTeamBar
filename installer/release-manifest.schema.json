@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:team-bar:release-manifest:v1",
+  "title": "Team Bar release manifest v1",
+  "description": "Team Bar update manifest signed with detached CMS over the exact UTF-8 bytes. The client verifies the metadata signer before checking the installer publisher fingerprint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "product", "channel", "version", "publishedAt", "expiresAt", "nativeBridgeVersion", "nativeProtocol", "releaseNotes", "installer", "files"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "product": { "const": "team-bar" },
+    "channel": { "enum": ["beta", "stable"] },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.-]+)?$" },
+    "publishedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "nativeBridgeVersion": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "nativeProtocol": { "type": "integer", "minimum": 1 },
+    "releaseNotes": { "type": "string", "minLength": 1, "maxLength": 10000 },
+    "installer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["url", "sha256", "bytes", "publisherSha256"],
+      "properties": {
+        "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "sha256": { "$ref": "#/$defs/hash" },
+        "publisherSha256": { "$ref": "#/$defs/hash" },
+        "bytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "files": {
+      "type": "array", "minItems": 4,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["path", "sha256", "bytes"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^[A-Za-z0-9_./ -]+$", "minLength": 1 },
+          "sha256": { "$ref": "#/$defs/hash" },
+          "bytes": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  },
+  "$defs": { "hash": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" } }
+}

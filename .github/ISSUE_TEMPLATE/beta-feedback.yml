@@ -1,0 +1,23 @@
+name: Beta feedback
+description: Report a setup, update, or gameplay UI issue
+title: "[Beta] "
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Include the Team Bar version, Windows version and game build if known.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: What happened?
+      description: List the steps, what you expected, and what you saw. For Screens, include monitor count, scaling, Quick Swap and resolution matching.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Optional error or screenshot
+      description: Remove character names, account IDs, local paths and credentials before sharing.

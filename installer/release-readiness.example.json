@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "product": "team-bar",
+  "appVersion": "0.1.0-beta.1",
+  "fileVersion": "0.1.0.0",
+  "artifactFlavor": "team-bar",
+  "runtimeTfm": "net10.0-windows",
+  "selfContained": true,
+  "readyForDistribution": false,
+  "nativeBridgeVersion": "api-1",
+  "nativeProtocol": 1,
+  "checks": {
+    "publicEntryPointsOnly": false,
+    "profileMigrationAndRollback": false,
+    "gracefulInputShutdown": false,
+    "supportedPatchedRuntime": false,
+    "cleanWindowsInstallUpgradeUninstall": false
+  },
+  "files": [],
+  "evidence": []
+}

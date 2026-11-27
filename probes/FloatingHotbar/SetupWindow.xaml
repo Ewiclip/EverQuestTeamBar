@@ -1,0 +1,770 @@
+<Window x:Class="TeamBar.SetupWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:TeamBar"
+ Title="Team Bar · Configuration" Width="1200" Height="920" MinWidth="960" MinHeight="680"
+ WindowStartupLocation="CenterScreen" Background="{DynamicResource AppBackground}" Foreground="{DynamicResource Text}"
+ FontFamily="Segoe UI" FontSize="14" UseLayoutRounding="True" SnapsToDevicePixels="True" Loaded="Updates_Loaded">
+ <Window.Resources>
+  <ControlTemplate x:Key="ScreenMapTile" TargetType="Button">
+   <Grid Background="{TemplateBinding Background}" ClipToBounds="True">
+    <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+    <Border x:Name="Outline" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+            IsHitTestVisible="False"/>
+   </Grid>
+   <ControlTemplate.Triggers>
+    <MultiTrigger>
+     <MultiTrigger.Conditions>
+      <Condition Property="Focusable" Value="True"/><Condition Property="IsMouseOver" Value="True"/>
+     </MultiTrigger.Conditions>
+     <Setter TargetName="Outline" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+    </MultiTrigger>
+    <Trigger Property="IsKeyboardFocused" Value="True">
+     <Setter TargetName="Outline" Property="BorderBrush" Value="{DynamicResource Text}"/>
+     <Setter TargetName="Outline" Property="BorderThickness" Value="2"/>
+    </Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate>
+  <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="NoWrap"/></Style>
+  <Style x:Key="Hint" TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Muted}"/><Setter Property="FontSize" Value="12"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+  <BooleanToVisibilityConverter x:Key="ShowWhenChecked"/>
+  <Style x:Key="MasterResolutionClickHint" TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+   <Setter Property="Text" Value="{x:Static local:GameViewLayoutWindow.FixedPreviewClickHint}"/>
+   <Setter Property="Margin" Value="4,2,0,2"/>
+   <Setter Property="AutomationProperties.LiveSetting" Value="Polite"/>
+   <Style.Triggers>
+    <DataTrigger Binding="{Binding IsChecked}" Value="True">
+     <Setter Property="Text" Value="Click a preview to swap that character into the master slot."/>
+    </DataTrigger>
+   </Style.Triggers>
+  </Style>
+  <Style x:Key="SwapRedrawHint" TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+   <Setter Property="Text" Value="EQ can take about a second to redraw its UI when you swap between different slot sizes. Matching the master resolution skips this redraw."/>
+   <Setter Property="Visibility" Value="Collapsed"/>
+   <Setter Property="AutomationProperties.LiveSetting" Value="Polite"/>
+  </Style>
+  <Style x:Key="LayoutPlaceholder" TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+   <Setter Property="Margin" Value="12,0"/><Setter Property="VerticalAlignment" Value="Center"/>
+   <Setter Property="IsHitTestVisible" Value="False"/><Setter Property="Visibility" Value="Collapsed"/>
+   <Style.Triggers><Trigger Property="Tag" Value=""><Setter Property="Visibility" Value="Visible"/></Trigger></Style.Triggers>
+  </Style>
+  <Style TargetType="Button">
+   <Setter Property="Background" Value="{DynamicResource ButtonSurface}"/><Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+   <Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="15,9"/><Setter Property="MinHeight" Value="38"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <Border x:Name="Shell" CornerRadius="7" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+     <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+    </Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="Shell" Property="BorderThickness" Value="2"/></Trigger>
+     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Shell" Property="Opacity" Value="0.7"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.38"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+   <Setter Property="Background" Value="{DynamicResource Accent}"/><Setter Property="Foreground" Value="{DynamicResource OnAccent}"/><Setter Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <Style x:Key="Quiet" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource Muted}"/></Style>
+  <Style TargetType="TextBox">
+   <Setter Property="Background" Value="{DynamicResource Field}"/><Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="CaretBrush" Value="{DynamicResource Accent}"/>
+   <Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="Padding" Value="13,11"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox">
+    <Border x:Name="Shell" CornerRadius="7" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+     <ScrollViewer x:Name="PART_ContentHost"/>
+    </Border>
+    <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ComboBoxItem">
+   <Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="Padding" Value="12,9"/>
+   <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+    <Border x:Name="Item" Padding="{TemplateBinding Padding}" CornerRadius="4" Background="Transparent"><ContentPresenter/></Border>
+    <ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Item" Property="Background" Value="{DynamicResource HoverSurface}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="Item" Property="Background" Value="{DynamicResource SelectedOption}"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ComboBox">
+   <Setter Property="Background" Value="{DynamicResource Field}"/><Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+   <Setter Property="MinHeight" Value="46"/><Setter Property="MaxDropDownHeight" Value="320"/><Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+    <Grid>
+     <Border x:Name="Shell" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="7"/>
+     <ToggleButton x:Name="DropDownToggle" Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" ClickMode="Press">
+      <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent"><Path Margin="0,0,15,0" HorizontalAlignment="Right" VerticalAlignment="Center" Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource Muted}" StrokeThickness="1.5"/></Border></ControlTemplate></ToggleButton.Template>
+     </ToggleButton>
+     <ContentPresenter x:Name="SelectionPresenter" IsHitTestVisible="False" Margin="13,6,35,6" HorizontalAlignment="Left" VerticalAlignment="Center" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
+     <TextBox x:Name="PART_EditableTextBox" Style="{x:Null}" Visibility="Collapsed" Margin="13,6,35,6" VerticalContentAlignment="Center" Background="Transparent" Foreground="{TemplateBinding Foreground}" CaretBrush="{DynamicResource Accent}" BorderThickness="0" IsReadOnly="{TemplateBinding IsReadOnly}">
+      <TextBox.Template><ControlTemplate TargetType="TextBox"><ScrollViewer x:Name="PART_ContentHost"/></ControlTemplate></TextBox.Template>
+     </TextBox>
+     <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" IsOpen="{TemplateBinding IsDropDownOpen}" Focusable="False">
+      <Border Background="{DynamicResource PopupSurface}" BorderBrush="{DynamicResource PopupBorder}" BorderThickness="1" CornerRadius="8" Padding="5" Margin="0,4,0,4" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+       <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
+      </Border>
+     </Popup>
+    </Grid>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsEditable" Value="True"><Setter TargetName="SelectionPresenter" Property="Visibility" Value="Collapsed"/><Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/><Setter TargetName="DropDownToggle" Property="HorizontalAlignment" Value="Right"/><Setter TargetName="DropDownToggle" Property="Width" Value="34"/><Setter Property="IsTabStop" Value="False"/></Trigger>
+     <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource HoverBorder}"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ListBoxItem">
+   <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Margin" Value="0,0,0,8"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+    <Border x:Name="Shell" CornerRadius="8" BorderBrush="Transparent" BorderThickness="1" Background="Transparent" Padding="14,14"><ContentPresenter/></Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Shell" Property="Background" Value="{DynamicResource ButtonSurface}"/></Trigger>
+     <Trigger Property="IsSelected" Value="True"><Setter TargetName="Shell" Property="Background" Value="{DynamicResource SelectedSurface}"/><Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource SelectedBorder}"/></Trigger>
+     <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="TeamCard" TargetType="CheckBox">
+   <Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+    <Border x:Name="Card" CornerRadius="9" Background="{DynamicResource CardSurface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" Padding="13,8" Margin="0,0,10,4">
+     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions>
+      <ContentPresenter Margin="0,0,20,0"/>
+      <Border x:Name="Check" Grid.Column="1" CornerRadius="5" Width="19" Height="19" BorderThickness="1" BorderBrush="{DynamicResource CheckBorder}" VerticalAlignment="Center">
+       <Path x:Name="Tick" Data="M 3 8 L 7 12 L 14 4" Stroke="{DynamicResource OnAccent}" StrokeThickness="2" Visibility="Hidden"/>
+      </Border>
+     </Grid>
+    </Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsChecked" Value="True"><Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource CardSelectedBorder}"/><Setter TargetName="Card" Property="Background" Value="{DynamicResource CardSelected}"/><Setter TargetName="Check" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="Check" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="Tick" Property="Visibility" Value="Visible"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="Card" Property="BorderThickness" Value="2"/></Trigger>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="Mode" TargetType="RadioButton">
+   <Setter Property="Foreground" Value="{DynamicResource Muted}"/><Setter Property="Padding" Value="17,8"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
+    <Border x:Name="Shell" CornerRadius="6" Padding="{TemplateBinding Padding}" Background="Transparent" BorderThickness="1" BorderBrush="Transparent"><ContentPresenter/></Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsChecked" Value="True"><Setter TargetName="Shell" Property="Background" Value="{DynamicResource SegmentSelected}"/><Setter Property="Foreground" Value="{DynamicResource SegmentText}"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ScrollBar">
+   <Setter Property="Width" Value="10"/><Setter Property="Background" Value="Transparent"/><Setter Property="MinWidth" Value="0"/><Setter Property="MinHeight" Value="0"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+    <Grid Background="Transparent"><Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="{TemplateBinding Orientation}">
+     <Track.DecreaseRepeatButton><RepeatButton x:Name="Before" Command="ScrollBar.PageUpCommand" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton>
+     <Track.Thumb><Thumb x:Name="Grip" MinHeight="24" Margin="2"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="Fill" Background="{DynamicResource Scrollbar}" CornerRadius="4"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Fill" Property="Background" Value="{DynamicResource ScrollbarHover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+     <Track.IncreaseRepeatButton><RepeatButton x:Name="After" Command="ScrollBar.PageDownCommand" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton>
+    </Track></Grid>
+    <ControlTemplate.Triggers><Trigger Property="Orientation" Value="Horizontal"><Setter Property="Width" Value="Auto"/><Setter Property="Height" Value="10"/><Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/><Setter TargetName="Grip" Property="MinHeight" Value="0"/><Setter TargetName="Grip" Property="MinWidth" Value="24"/><Setter TargetName="Before" Property="Command" Value="ScrollBar.PageLeftCommand"/><Setter TargetName="After" Property="Command" Value="ScrollBar.PageRightCommand"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="FloatingToggle" TargetType="CheckBox">
+   <Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+    <StackPanel Orientation="Horizontal"><Border x:Name="Box" Width="19" Height="19" CornerRadius="5" Background="{DynamicResource Field}" BorderBrush="{DynamicResource CheckBorder}" BorderThickness="1" Margin="0,0,10,0">
+     <TextBlock x:Name="Tick" Text="✓" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource OnAccent}" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Border><ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/></StackPanel>
+    <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="Tick" Property="Visibility" Value="Visible"/></Trigger>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="Box" Property="BorderThickness" Value="2"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="LayoutSwitch" TargetType="CheckBox">
+   <Setter Property="Foreground" Value="{DynamicResource Text}"/>
+   <Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+    <Border x:Name="SwitchFocus" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="5" Padding="3,4">
+     <StackPanel Orientation="Horizontal">
+      <Border x:Name="Track" Width="32" Height="18" CornerRadius="9" BorderThickness="1" BorderBrush="{DynamicResource CheckBorder}" Background="{DynamicResource Field}">
+       <Ellipse x:Name="Thumb" Width="10" Height="10" Margin="3,0" HorizontalAlignment="Left" VerticalAlignment="Center" Fill="{DynamicResource Muted}"/>
+      </Border>
+      <ContentPresenter Margin="7,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+     </StackPanel>
+    </Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsChecked" Value="True">
+      <Setter TargetName="Track" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/><Setter TargetName="Thumb" Property="Fill" Value="{DynamicResource OnAccent}"/>
+     </Trigger>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Text}"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="SwitchFocus" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="FloatingSlider" TargetType="Slider">
+   <Setter Property="Height" Value="24"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider">
+    <Grid Background="Transparent"><Track x:Name="PART_Track" Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" Value="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+     <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="{DynamicResource Accent}" Height="4" CornerRadius="2"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton>
+     <Track.IncreaseRepeatButton><RepeatButton Command="Slider.IncreaseLarge" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="{DynamicResource Line}" Height="4" CornerRadius="2"/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton>
+     <Track.Thumb><Thumb Width="18" Height="18" Cursor="Hand"><Thumb.Template><ControlTemplate TargetType="Thumb"><Ellipse x:Name="Knob" Fill="{DynamicResource Accent}" Stroke="{DynamicResource Surface}" StrokeThickness="3"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Knob" Property="StrokeThickness" Value="1"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+    </Track><Border x:Name="FocusRing" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="6" Visibility="Collapsed" IsHitTestVisible="False"/></Grid>
+    <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="FocusRing" Property="Visibility" Value="Visible"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="LayoutAssignmentChip" TargetType="ToggleButton">
+   <Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Padding" Value="10,5"/><Setter Property="Margin" Value="0,0,6,6"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton">
+    <Border x:Name="Chip" Background="{DynamicResource ButtonSurface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter VerticalAlignment="Center"/></Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsChecked" Value="True"><Setter TargetName="Chip" Property="Background" Value="{DynamicResource SelectedSurface}"/><Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource Text}"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="ThemeChoice" TargetType="RadioButton">
+   <Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
+    <Border x:Name="Choice" Background="{DynamicResource Field}" BorderBrush="{DynamicResource Line}" BorderThickness="2" CornerRadius="11" Padding="15">
+     <Grid><ContentPresenter Margin="0,0,0,27"/>
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
+       <Border x:Name="Ring" Width="17" Height="17" CornerRadius="9" BorderBrush="{DynamicResource CheckBorder}" BorderThickness="1" Margin="0,0,8,0"><Ellipse x:Name="Dot" Fill="{DynamicResource Accent}" Margin="3" Visibility="Hidden"/></Border>
+       <TextBlock x:Name="ChoiceStatus" Text="Select" Foreground="{DynamicResource Muted}" FontSize="12"/>
+      </StackPanel>
+     </Grid>
+    </Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsChecked" Value="True"><Setter TargetName="Choice" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="Choice" Property="Background" Value="{DynamicResource SelectedSurface}"/><Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="Dot" Property="Visibility" Value="Visible"/><Setter TargetName="ChoiceStatus" Property="Text" Value="Selected"/><Setter TargetName="ChoiceStatus" Property="Foreground" Value="{DynamicResource Success}"/></Trigger>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Choice" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Choice" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="Choice" Property="BorderThickness" Value="3"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="Expander">
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander">
+    <StackPanel>
+     <ToggleButton x:Name="HeaderToggle" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" HorizontalContentAlignment="Stretch" Foreground="{TemplateBinding Foreground}">
+      <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="FocusBorder" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" Padding="2"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="FocusBorder" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
+      <DockPanel><TextBlock x:Name="Chevron" Text="›" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center" RenderTransformOrigin=".5,.5"/><ContentPresenter ContentSource="Header" VerticalAlignment="Center"/></DockPanel>
+     </ToggleButton>
+     <ContentPresenter x:Name="Body" Visibility="Collapsed" Margin="0,8,0,0"/>
+    </StackPanel>
+    <ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="Body" Property="Visibility" Value="Visible"/><Setter TargetName="Chevron" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90"/></Setter.Value></Setter></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+ </Window.Resources>
+ <DockPanel Background="{DynamicResource AppBackground}">
+  <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource HeaderLine}" BorderThickness="0,0,0,1" Padding="26,16,26,12">
+   <StackPanel>
+    <DockPanel Margin="0,0,0,16">
+     <Button x:Name="SettingsButton" DockPanel.Dock="Right" Content="⚙  Settings" Click="Settings_Click" AutomationProperties.Name="App settings"/>
+     <Border DockPanel.Dock="Right" Background="{DynamicResource Field}" CornerRadius="6" Padding="12,7" Margin="0,0,14,0" VerticalAlignment="Center">
+      <TextBlock x:Name="MemoryModeLabel" Text="Manual mode · memory reading off" FontSize="12" Foreground="{DynamicResource Muted}"/>
+     </Border>
+     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+      <Border Width="32" Height="32" Background="{DynamicResource BrandSurface}" CornerRadius="8" Margin="0,0,10,0"><Path Data="M 0 0 H 7 V 7 H 0 Z M 11 0 H 18 V 7 H 11 Z M 0 11 H 7 V 18 H 0 Z M 11 11 H 18 V 18 H 11 Z" Fill="{DynamicResource Accent}" Width="17" Height="17" Stretch="Uniform"/></Border>
+      <TextBlock x:Name="EditionTitle" Text="Team Bar" FontSize="21" FontWeight="SemiBold" VerticalAlignment="Center"/>
+     </StackPanel>
+    </DockPanel>
+    <StackPanel Orientation="Horizontal">
+     <RadioButton x:Name="HotKeysTab" Content="Hot Keys" GroupName="SettingsSection" IsChecked="True" Style="{StaticResource Mode}" Checked="SettingsTab_Changed" Margin="0,0,8,0"/>
+     <RadioButton x:Name="SpellOverlaysTab" Content="Spell Overlays" GroupName="SettingsSection" Style="{StaticResource Mode}" Checked="SettingsTab_Changed" Margin="0,0,8,0" ToolTipService.ShowOnDisabled="True"/>
+     <RadioButton x:Name="DataCollectionTab" Content="Data Collection" GroupName="SettingsSection" Style="{StaticResource Mode}" Checked="SettingsTab_Changed" Margin="0,0,8,0" ToolTipService.ShowOnDisabled="True" Visibility="Collapsed"/>
+     <RadioButton x:Name="ScreensTab" Content="Screens" GroupName="SettingsSection" Style="{StaticResource Mode}" Checked="SettingsTab_Changed"/>
+    </StackPanel>
+   </StackPanel>
+  </Border>
+  <Border x:Name="ApplicationLifetimeFooter" DockPanel.Dock="Bottom" BorderBrush="{DynamicResource HeaderLine}" BorderThickness="0,1,0,0" Padding="26,10" Visibility="Collapsed">
+   <DockPanel>
+    <Button x:Name="ExitTeamBarButton" DockPanel.Dock="Right" Content="Exit Team Bar" Click="ExitTeamBar_Click" Margin="20,0,0,0" AutomationProperties.Name="Exit Team Bar" ToolTip="Close all Team Bar windows, stop input, and exit the tray application."/>
+    <TextBlock Text="Closing this window with × keeps Team Bar and your overlays running in the system tray." Style="{StaticResource Hint}" VerticalAlignment="Center"/>
+   </DockPanel>
+  </Border>
+  <Grid><ContentControl x:Name="SpellSettingsHost" Visibility="Collapsed" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+ <ContentControl x:Name="DataSettingsHost" Visibility="Collapsed" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+ <ScrollViewer x:Name="ScreensView" Visibility="Collapsed" IsVisibleChanged="ScreensVisibility_Changed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+  <StackPanel Margin="26,16,26,22">
+   <DockPanel Margin="0,0,0,18">
+    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+     <Button Content="Identify screens" Click="IdentifyScreens_Click" Margin="0,0,8,0"/>
+     <Button x:Name="EndScreenLayout" Content="End layout" Click="EndScreenLayout_Click" Visibility="Collapsed" Margin="0,0,8,0"/>
+     <Button x:Name="NewScreenLayout" Content="New layout" Click="NewScreenLayout_Click"/>
+    </StackPanel>
+    <StackPanel VerticalAlignment="Center">
+     <TextBlock Text="Screens" FontSize="24" FontWeight="SemiBold"/>
+     <TextBlock x:Name="ScreenLayoutStatus" Style="{StaticResource Hint}" Margin="0,3,0,0" AutomationProperties.LiveSetting="Polite"/>
+    </StackPanel>
+   </DockPanel>
+   <DockPanel Margin="0,0,0,12">
+    <Button x:Name="ChooseScreenFolder" DockPanel.Dock="Right" Content="Choose EQ folder…" Click="ChooseScreenFolder_Click" VerticalAlignment="Top" Margin="12,0,0,0"/>
+    <StackPanel>
+     <TextBlock Text="EverQuest Live folder" FontWeight="SemiBold"/>
+     <TextBlock x:Name="ScreenFolderPath" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+     <TextBlock x:Name="ScreenFolderNotice" Style="{StaticResource Hint}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+    </StackPanel>
+   </DockPanel>
+   <Border CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="20">
+    <StackPanel>
+     <TextBlock x:Name="ScreenEditorHeading" Text="Saved layouts" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+     <TextBlock x:Name="EmptyScreenLayouts" Text="Create a layout to place character slots on your monitor map." Style="{StaticResource Hint}"/>
+     <StackPanel x:Name="SavedScreenLayoutsPanel" Visibility="Collapsed">
+      <DockPanel x:Name="ScreenPresetActions">
+       <Button x:Name="ApplyScreenLayout" DockPanel.Dock="Right" Content="Apply layout" Style="{StaticResource Primary}" Click="ApplyScreenLayout_Click"/>
+       <Button x:Name="EditScreenLayout" DockPanel.Dock="Right" FontFamily="Segoe MDL2 Assets" FontSize="16" Content="&#xE70F;" Margin="8,0" Padding="12,6" Click="EditScreenLayout_Click" AutomationProperties.Name="Edit layout" ToolTip="Edit layout"/>
+       <ComboBox x:Name="ScreenLayoutPicker" DisplayMemberPath="Name" AutomationProperties.Name="Saved screen layouts" SelectionChanged="ScreenLayoutSelection_Changed"/>
+      </DockPanel>
+      <TextBlock x:Name="ScreenWindowedWarning" Visibility="Collapsed" Margin="0,8,0,0" TextWrapping="Wrap"
+                 Foreground="{DynamicResource Error}" AutomationProperties.LiveSetting="Polite"/>
+      <DockPanel x:Name="InlineNameRow" Visibility="Collapsed">
+       <Button x:Name="SaveInlineLayout" DockPanel.Dock="Right" Content="Save layout" Style="{StaticResource Primary}" Click="SaveInline_Click"/>
+       <Button x:Name="CancelInlineLayout" DockPanel.Dock="Right" Content="Cancel" Margin="8,0" Click="CancelInline_Click"/>
+       <Grid>
+        <TextBox x:Name="InlineLayoutName" AutomationProperties.Name="Layout name" ToolTip="Layout name" TextChanged="InlineName_Changed"/>
+        <TextBlock Text="Layout name" Tag="{Binding Text, ElementName=InlineLayoutName}" Style="{StaticResource LayoutPlaceholder}"/>
+       </Grid>
+      </DockPanel>
+      <Border Background="{DynamicResource Field}" BorderThickness="1" BorderBrush="{DynamicResource Line}" CornerRadius="8" Padding="14" Margin="0,12,0,0">
+       <StackPanel>
+        <TextBlock x:Name="ScreenLayoutDescription" FontWeight="SemiBold" TextWrapping="Wrap"/>
+        <StackPanel x:Name="ScreenSwitches" Margin="0,6,0,0">
+         <WrapPanel Margin="-4,0,0,0">
+          <CheckBox x:Name="ScreenSwappingSwitch" Content="Enable Quick Swap" Style="{StaticResource LayoutSwitch}" Margin="0,0,12,0" VerticalAlignment="Top"
+                   ToolTipService.ShowOnDisabled="True" Checked="ScreenOption_Changed" Unchecked="ScreenOption_Changed"/>
+          <CheckBox x:Name="ScreenAddSwapButton" Content="Add Swap Button" Style="{StaticResource LayoutSwitch}" Margin="0,0,12,0" VerticalAlignment="Top"
+                   ToolTip="Show a movable swap button in each occupied slot." Checked="ScreenOption_Changed" Unchecked="ScreenOption_Changed"/>
+          <StackPanel>
+           <CheckBox x:Name="ScreenMatchMasterResolutionSwitch" Content="All screens match master resolution" Style="{StaticResource LayoutSwitch}"
+                     HorizontalAlignment="Left" Checked="ScreenOption_Changed" Unchecked="ScreenOption_Changed">
+            <CheckBox.ToolTip>
+             <TextBlock MaxWidth="340" TextWrapping="Wrap" Text="Scale background views from the master resolution. Every assigned EQ window must use Windowed mode, including the master and previews."/>
+            </CheckBox.ToolTip>
+           </CheckBox>
+           <TextBlock x:Name="ScreenMasterResolutionClickNotice" Style="{StaticResource MasterResolutionClickHint}"
+                      DataContext="{Binding ElementName=ScreenSwappingSwitch}"
+                      MaxWidth="{Binding ActualWidth, ElementName=ScreenMatchMasterResolutionSwitch}"
+                      Visibility="{Binding IsChecked, ElementName=ScreenMatchMasterResolutionSwitch, Converter={StaticResource ShowWhenChecked}}"/>
+          </StackPanel>
+         </WrapPanel>
+         <TextBlock x:Name="ScreenSwapRedrawHint" Margin="0,2,0,0">
+          <TextBlock.Style>
+           <Style TargetType="TextBlock" BasedOn="{StaticResource SwapRedrawHint}">
+            <Style.Triggers>
+             <MultiDataTrigger>
+              <MultiDataTrigger.Conditions>
+               <Condition Binding="{Binding IsChecked, ElementName=ScreenSwappingSwitch}" Value="True"/>
+               <Condition Binding="{Binding IsChecked, ElementName=ScreenMatchMasterResolutionSwitch}" Value="False"/>
+              </MultiDataTrigger.Conditions>
+              <Setter Property="Visibility" Value="Visible"/>
+             </MultiDataTrigger>
+             <MultiDataTrigger>
+              <MultiDataTrigger.Conditions>
+               <Condition Binding="{Binding IsChecked, ElementName=ScreenAddSwapButton}" Value="True"/>
+               <Condition Binding="{Binding IsChecked, ElementName=ScreenMatchMasterResolutionSwitch}" Value="False"/>
+              </MultiDataTrigger.Conditions>
+              <Setter Property="Visibility" Value="Visible"/>
+             </MultiDataTrigger>
+            </Style.Triggers>
+           </Style>
+          </TextBlock.Style>
+         </TextBlock>
+         <local:GameViewSwapButtonAppearance x:Name="ScreenButtonAppearance" Visibility="Collapsed" Margin="0,5,0,0"/>
+         <Border Height="1" Background="{DynamicResource Line}" Margin="0,8,0,6"/>
+         <WrapPanel Margin="-4,0,0,0">
+          <CheckBox x:Name="ScreenHideTitleBarsSwitch" Content="Hide Title Bars" Style="{StaticResource LayoutSwitch}" Margin="0,0,12,0"
+                   ToolTip="Hide the Windows title bar in every slot. If EQ keeps its maximized frame, a thin strip covers the title bar to preserve your UI layout." Checked="ScreenOption_Changed" Unchecked="ScreenOption_Changed"/>
+          <CheckBox x:Name="ScreenOverlapTaskbarSwitch" Content="Overlap Taskbar" Style="{StaticResource LayoutSwitch}" Margin="0,0,12,0"
+                   ToolTip="Extend slots across the space occupied by the Windows taskbar." Checked="ScreenOption_Changed" Unchecked="ScreenOption_Changed"/>
+          <CheckBox x:Name="ScreenAlwaysOnTopSwitch" Content="Always on Top" Style="{StaticResource LayoutSwitch}"
+                   ToolTip="Keep the games above other apps. Team Bar controls stay accessible." Checked="ScreenOption_Changed" Unchecked="ScreenOption_Changed"/>
+         </WrapPanel>
+        </StackPanel>
+        <local:GameViewScreenMap x:Name="SavedScreenMap" IsReadOnly="True" Height="184" Margin="0,12,0,0"
+                                 AutomationProperties.Name="Saved layout preview"/>
+        <StackPanel x:Name="InlineTools" Visibility="Collapsed" Margin="0,10,0,0">
+         <WrapPanel Margin="0,0,0,10">
+          <StackPanel Width="180" Margin="0,0,8,0"><TextBlock Text="Screen" Style="{StaticResource Hint}"/><ComboBox x:Name="InlineScreenPicker" DisplayMemberPath="Label" AutomationProperties.Name="Screen to configure" SelectionChanged="InlineScreen_Changed"/></StackPanel>
+          <StackPanel Width="85" Margin="0,0,8,0"><TextBlock Text="Slots" Style="{StaticResource Hint}"/><ComboBox x:Name="InlineCapacity" AutomationProperties.Name="Slots on this screen" SelectionChanged="InlineGeometry_Changed"/></StackPanel>
+          <StackPanel Width="215" Margin="0,0,8,0"><TextBlock Text="Arrangement" Style="{StaticResource Hint}"/><ComboBox x:Name="InlineArrangement" DisplayMemberPath="Label" SelectedValuePath="Kind" AutomationProperties.Name="Arrangement" SelectionChanged="InlineGeometry_Changed"/></StackPanel>
+          <StackPanel x:Name="InlineEdgeOptions" Width="115"><TextBlock Text="Preview edge" Style="{StaticResource Hint}"/><ComboBox x:Name="InlineEdge" AutomationProperties.Name="Preview strip edge" SelectionChanged="InlineGeometry_Changed"/></StackPanel>
+         </WrapPanel>
+         <WrapPanel x:Name="InlineOfflineRow" Visibility="Collapsed" Margin="0,0,0,8">
+          <ComboBox x:Name="InlineReplacement" Width="175" DisplayMemberPath="Label" AutomationProperties.Name="Replacement screen"/>
+          <Button Content="Move slots to screen" Margin="6,0" Click="MoveInlineScreen_Click"/>
+         </WrapPanel>
+         <local:GameViewScreenMap x:Name="InlineOfflineMap" Height="108" IsReadOnly="True" Visibility="Collapsed" AutomationProperties.Name="Disconnected screen slots"/>
+         <TextBlock Text="Drag a character or the swap star onto a slot, or select one here and then select a slot." Style="{StaticResource Hint}" Margin="0,0,0,6"/>
+         <WrapPanel x:Name="InlinePalette" AutomationProperties.Name="Slot assignments"/>
+         <WrapPanel Margin="0,3,0,0">
+          <Grid Width="138">
+           <TextBox x:Name="InlineCharacterName" AutomationProperties.Name="Character name" ToolTip="Character name" KeyDown="InlineCharacterName_KeyDown"/>
+           <TextBlock Text="Character name" Tag="{Binding Text, ElementName=InlineCharacterName}" Style="{StaticResource LayoutPlaceholder}"/>
+          </Grid>
+          <Button Content="Add name" Margin="6,0,12,0" Padding="10,5" Click="InlineAddName_Click"/>
+          <Button x:Name="InlineIdentifyWindows" Content="Identify EQ windows" Padding="10,5" Click="InlineIdentify_Click"/>
+          <Button x:Name="InlineClearSlot" Content="Clear selected slot" Padding="10,5" Margin="6,0,0,0" Click="InlineClear_Click"/>
+         </WrapPanel>
+        </StackPanel>
+        <TextBlock x:Name="ScreenLayoutSlots" TextWrapping="Wrap" Margin="0,12,0,0"/>
+       </StackPanel>
+      </Border>
+     </StackPanel>
+     <TextBlock x:Name="ScreenActionFeedback" Style="{StaticResource Hint}" Margin="0,12,0,0" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+     <Button x:Name="UseFixedSlotSizes" Content="Use fixed slots at their own resolutions" HorizontalAlignment="Left"
+             Margin="0,8,0,0" Visibility="Collapsed" Click="UseFixedSlotSizes_Click"/>
+    </StackPanel>
+   </Border>
+  </StackPanel>
+ </ScrollViewer>
+ <Grid x:Name="ReviewRoot" Background="{DynamicResource AppBackground}">
+  <Grid.RowDefinitions><RowDefinition Height="Auto" MinHeight="64"/><RowDefinition Height="*"/><RowDefinition Height="84"/></Grid.RowDefinitions>
+  <Border Padding="27,8,27,0">
+   <Grid>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <StackPanel VerticalAlignment="Center">
+     <TextBlock x:Name="SectionHeading" Text="Hot Keys" FontSize="24" FontWeight="SemiBold"/>
+     <TextBlock x:Name="SectionDescription" Text="Create a button once. Use it on its own or in a group." Style="{StaticResource Hint}" Margin="0,3,0,0"/>
+    </StackPanel>
+    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+     <Expander x:Name="WindowLayoutActions" Header="Game windows" Foreground="{DynamicResource Muted}" Margin="0,0,16,0" VerticalAlignment="Center">
+      <StackPanel Orientation="Horizontal" Margin="0,6,0,0"><Button x:Name="GameViewLayoutsButton" Content="Window layouts…" Click="GameViews_Click" Margin="0,0,8,0"/><Button Content="Save positions" Click="SaveWindows_Click" Margin="0,0,8,0" ToolTip="Remember the selected characters’ game windows."/><Button Content="Restore" Click="RestoreWindows_Click" ToolTip="Move selected game windows to their saved positions."/></StackPanel>
+     </Expander>
+     <Button x:Name="PlacementButton" Content="Position" Click="Placement_Click" Margin="0,0,8,0" AutomationProperties.Name="Position of the selected button or bar"/>
+    </StackPanel>
+   </Grid>
+  </Border>
+  <Grid Grid.Row="1" x:Name="EditorBody" Margin="26,14,26,0">
+   <Grid.ColumnDefinitions><ColumnDefinition x:Name="SidebarColumn" Width="240"/><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="20"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+   <Border Grid.ColumnSpan="3" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" CornerRadius="12" Padding="20,12">
+    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <DockPanel Margin="0,0,0,8">
+     <Button x:Name="RefreshCharactersButton" Content="↻  Refresh" DockPanel.Dock="Right" HorizontalAlignment="Right" Style="{StaticResource Quiet}" Padding="10,4" MinHeight="28" Click="Refresh_Click" ToolTipService.ShowOnDisabled="True"/>
+      <Button x:Name="AssignCharactersButton" Content="Assign characters" DockPanel.Dock="Right" HorizontalAlignment="Right" Style="{StaticResource Quiet}" Padding="10,4" MinHeight="28" Click="AssignWindows_Click"/>
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="Your team" FontSize="16" FontWeight="SemiBold"/><TextBlock x:Name="TeamCount" FontSize="12" Foreground="{DynamicResource Muted}" Margin="12,3,0,0"/></StackPanel>
+     </DockPanel>
+     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+      <ItemsControl x:Name="TeamCards"><ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+       <ItemsControl.ItemTemplate><DataTemplate><CheckBox Style="{StaticResource TeamCard}" IsChecked="{Binding Included, Mode=TwoWay}" AutomationProperties.Name="{Binding Name}">
+        <StackPanel MinWidth="170"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"/><TextBlock Text="{Binding Details}" Style="{StaticResource Hint}" Margin="0,3,0,0"/></StackPanel>
+       </CheckBox></DataTemplate></ItemsControl.ItemTemplate>
+      </ItemsControl>
+     </ScrollViewer>
+     <TextBlock x:Name="NoClients" Grid.Row="1" Text="No characters detected. Load your team and refresh, or assign windows yourself." Foreground="{DynamicResource Muted}" Margin="0,12" Visibility="Collapsed"/>
+    </Grid>
+   </Border>
+   <Border x:Name="LibraryPanel" Grid.Row="2" CornerRadius="12" Background="{DynamicResource Sidebar}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" AutomationProperties.Name="Button and group library">
+    <Border.Resources>
+     <Style x:Key="LibraryTab" TargetType="RadioButton">
+      <Setter Property="Height" Value="40"/><Setter Property="Foreground" Value="{DynamicResource Muted}"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FontSize" Value="14"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton"><Grid Background="Transparent">
+       <Border x:Name="Hover" Background="Transparent" CornerRadius="10,10,0,0"/>
+       <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+       <Border x:Name="ActiveLine" Height="2" Background="{DynamicResource Accent}" VerticalAlignment="Bottom" Visibility="Collapsed"/>
+       <Border x:Name="Focus" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="5" Margin="4" Visibility="Collapsed"/>
+      </Grid><ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Hover" Property="Background" Value="{DynamicResource ButtonSurface}"/></Trigger>
+       <Trigger Property="IsChecked" Value="True"><Setter TargetName="ActiveLine" Property="Visibility" Value="Visible"/><Setter Property="Foreground" Value="{DynamicResource Accent}"/></Trigger>
+       <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Focus" Property="Visibility" Value="Visible"/></Trigger>
+      </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+     </Style>
+     <Style x:Key="LibraryAction" TargetType="Button">
+      <Setter Property="Height" Value="40"/><Setter Property="MinHeight" Value="0"/><Setter Property="FontSize" Value="13"/><Setter Property="Foreground" Value="{DynamicResource Text}"/><Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Grid Background="Transparent">
+       <Border x:Name="Hover" Background="Transparent" CornerRadius="0,0,10,10"/>
+       <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+       <Border x:Name="Focus" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="5" Margin="4" Visibility="Collapsed"/>
+      </Grid><ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Hover" Property="Background" Value="{DynamicResource ButtonSurface}"/></Trigger>
+       <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Focus" Property="Visibility" Value="Visible"/></Trigger>
+       <Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.65"/></Trigger>
+       <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.38"/></Trigger>
+      </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+     </Style>
+     <Style x:Key="LibraryRow" TargetType="ListBoxItem">
+      <Setter Property="Height" Value="36"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="AutomationProperties.Name" Value="{Binding ManagementName}"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Grid Background="Transparent">
+       <Border x:Name="Shell" Background="Transparent" CornerRadius="5" Margin="0,1"/>
+       <Border x:Name="Separator" Background="{DynamicResource PanelLine}" Height="1" VerticalAlignment="Bottom" Margin="4,0" Opacity="0.5"/>
+       <Border x:Name="SelectedLine" Background="{DynamicResource Accent}" Width="3" HorizontalAlignment="Left" CornerRadius="2" Margin="0,1" Visibility="Collapsed"/>
+       <ContentPresenter Margin="12,0,3,0" VerticalAlignment="Center"/>
+       <Border x:Name="Focus" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="5" Visibility="Collapsed" IsHitTestVisible="False"/>
+      </Grid><ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Shell" Property="Background" Value="{DynamicResource ButtonSurface}"/></Trigger>
+       <Trigger Property="IsSelected" Value="True"><Setter TargetName="Shell" Property="Background" Value="{DynamicResource SelectedSurface}"/><Setter TargetName="SelectedLine" Property="Visibility" Value="Visible"/><Setter TargetName="Separator" Property="Opacity" Value="0"/></Trigger>
+       <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Focus" Property="Visibility" Value="Visible"/></Trigger>
+      </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+     </Style>
+    </Border.Resources>
+    <Grid><Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="40"/></Grid.RowDefinitions>
+     <Grid x:Name="LibraryTabs"><UniformGrid Columns="2">
+      <RadioButton x:Name="StandaloneLibraryMode" Content="Buttons" GroupName="Library" Style="{StaticResource LibraryTab}" IsChecked="True" Checked="Library_Changed"/>
+      <RadioButton x:Name="BarLibraryMode" Content="Groups" GroupName="Library" Style="{StaticResource LibraryTab}" Checked="Library_Changed"/>
+     </UniformGrid><Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource PanelLine}" IsHitTestVisible="False" Panel.ZIndex="-1"/></Grid>
+     <Grid Grid.Row="1" x:Name="LibrarySearchRow" Margin="10,10,10,10" Height="36">
+      <TextBox x:Name="LibrarySearch" Padding="31,7,27,7" FontSize="12" TextChanged="LibrarySearch_Changed" AutomationProperties.Name="Search buttons" ToolTip="Search names, recipients, classes, or key combinations."/>
+      <Path Data="M 12,7 A 5,5 0 1 1 2,7 A 5,5 0 1 1 12,7 M 11,11 L 16,16" Width="16" Height="16" Stretch="Uniform" Stroke="{DynamicResource Muted}" StrokeThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
+      <TextBlock x:Name="LibrarySearchPlaceholder" Text="Search buttons…" Foreground="{DynamicResource Muted}" Margin="32,0,27,0" VerticalAlignment="Center" IsHitTestVisible="False" FontSize="12"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=LibrarySearch}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+      <Button x:Name="ClearLibrarySearch" Content="×" Style="{StaticResource Quiet}" HorizontalAlignment="Right" Padding="7,1" MinHeight="28" Click="ClearSearch_Click" AutomationProperties.Name="Clear library search" Visibility="Collapsed"/>
+     </Grid>
+     <Grid Grid.Row="2" Margin="6,0,6,6">
+      <ListBox x:Name="ButtonList" Background="Transparent" BorderThickness="0" Padding="0" Foreground="{DynamicResource Text}" ItemContainerStyle="{StaticResource LibraryRow}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionChanged="ButtonList_SelectionChanged" AutomationProperties.Name="Button library">
+       <ListBox.Resources>
+       <DataTemplate x:Key="GroupLibraryItem"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions>
+        <TextBlock Text="{Binding ManagementName}" ToolTip="{Binding ManagementName}" FontSize="14" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Content="×" Style="{StaticResource Quiet}" Click="DeleteLibraryItem_Click" FontSize="20" Padding="2,0" Height="30" MinHeight="0" ToolTip="Delete this entry…" AutomationProperties.Name="{Binding ManagementName, StringFormat='Delete {0}'}"/>
+       </Grid></DataTemplate>
+       <DataTemplate x:Key="ButtonLibraryItem"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions>
+        <TextBlock x:Name="LibraryButtonName" Text="{Binding ManagementName}" FontSize="14" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" VerticalAlignment="Center"><TextBlock.Style><Style TargetType="TextBlock">
+         <Setter Property="ToolTip" Value="{Binding ManagementName}"/>
+         <Style.Triggers><DataTrigger Binding="{Binding HasConflict}" Value="True"><Setter Property="Foreground" Value="{DynamicResource Error}"/><Setter Property="ToolTip" Value="{Binding ConflictMessage}"/></DataTrigger></Style.Triggers>
+        </Style></TextBlock.Style></TextBlock>
+        <Button Grid.Column="1" Content="×" Style="{StaticResource Quiet}" Click="DeleteLibraryItem_Click" FontSize="20" Padding="2,0" Height="30" MinHeight="0" ToolTip="Delete this entry…" AutomationProperties.Name="{Binding ManagementName, StringFormat='Delete {0}'}"/>
+       </Grid></DataTemplate>
+       </ListBox.Resources>
+      </ListBox>
+      <TextBlock x:Name="LibraryEmptyHint" Text="No matching buttons" Style="{StaticResource Hint}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="8,18" Visibility="Collapsed" IsHitTestVisible="False"/>
+     </Grid>
+     <Grid x:Name="LibraryFooter" Grid.Row="3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+      <Button x:Name="DuplicateButtonControl" Content="Duplicate" Style="{StaticResource LibraryAction}" Click="DuplicateButton_Click" ToolTipService.ShowOnDisabled="True"/>
+      <Button x:Name="AddButtonControl" Grid.Column="1" Content="+ Add button" Style="{StaticResource LibraryAction}" Click="AddButton_Click" ToolTipService.ShowOnDisabled="True"/>
+      <Border Grid.ColumnSpan="2" Height="1" VerticalAlignment="Top" Background="{DynamicResource PanelLine}" IsHitTestVisible="False"/>
+      <Border Grid.Column="1" Width="1" HorizontalAlignment="Left" Background="{DynamicResource PanelLine}" IsHitTestVisible="False"/>
+     </Grid>
+    </Grid>
+   </Border>
+   <Border x:Name="ButtonEditor" Grid.Row="2" Grid.Column="2" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="24,18">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+     <StackPanel>
+      <TextBlock x:Name="ButtonHeading" Text="Button setup" FontSize="24" FontWeight="SemiBold"/>
+      <TextBlock Text="Button name (optional)" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,18,0,7"/>
+      <TextBox x:Name="NameField" MaxLength="24" TextChanged="NameField_TextChanged" AutomationProperties.Name="Button name"/>
+      <CheckBox x:Name="FloatButton" Content="Show as a floating button" Foreground="{DynamicResource Text}" Checked="FloatButton_Changed" Unchecked="FloatButton_Changed" Margin="0,14,0,0">
+       <CheckBox.Template><ControlTemplate TargetType="CheckBox"><StackPanel Orientation="Horizontal">
+        <Border x:Name="Box" Width="20" Height="20" CornerRadius="5" BorderBrush="{DynamicResource Accent}" BorderThickness="1" Background="{DynamicResource Field}" Margin="0,0,9,0">
+         <TextBlock x:Name="Tick" Text="✓" Foreground="{DynamicResource Accent}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+        </Border><ContentPresenter VerticalAlignment="Center"/></StackPanel>
+        <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Tick" Property="Visibility" Value="Visible"/></Trigger>
+         <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Box" Property="BorderThickness" Value="2"/></Trigger></ControlTemplate.Triggers>
+       </ControlTemplate></CheckBox.Template>
+      </CheckBox>
+      <TextBlock Text="Turn this off to use the button only in groups. Its mappings stay in your library." Style="{StaticResource Hint}" Margin="0,5,0,0"/>
+      <StackPanel x:Name="RecipientPanel">
+      <TextBlock Text="Send to" FontWeight="SemiBold" Margin="0,18,0,8"/>
+      <TextBlock Text="One click runs these keypresses in order." ToolTip="Hold multiple modifiers for combinations such as Ctrl+Shift+H. Keys can be reused: E and Alt+E are different chords." Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+      <TextBlock x:Name="ButtonConflictMessage" Foreground="{DynamicResource Error}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+      <ItemsControl x:Name="RuleList" AllowDrop="True" PreviewMouseMove="Rule_MouseMove" PreviewMouseLeftButtonUp="Rule_MouseUp" DragOver="Rule_DragOver" Drop="Rule_Drop">
+       <ItemsControl.ItemTemplate><DataTemplate>
+        <Border x:Name="MappingRule" Background="{DynamicResource Field}" CornerRadius="7" Padding="8" Margin="0,0,0,9"><Border.Style><Style TargetType="Border">
+         <Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="BorderThickness" Value="1"/>
+         <Style.Triggers><DataTrigger Binding="{Binding HasConflict}" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource Error}"/><Setter Property="BorderThickness" Value="2"/></DataTrigger></Style.Triggers>
+        </Style></Border.Style>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="26"/><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+         <TextBlock Text="⠿" FontSize="22" Foreground="{DynamicResource Muted}" Cursor="SizeAll" VerticalAlignment="Center" HorizontalAlignment="Center" PreviewMouseLeftButtonDown="RuleGrip_MouseDown" ToolTip="Drag to reorder this keypress"/>
+         <ComboBox IsSynchronizedWithCurrentItem="False" Grid.Column="1" ItemsSource="{Binding RecipientChoices, RelativeSource={RelativeSource AncestorType=Window}}" SelectedItem="{Binding Target, Mode=TwoWay}" TextSearch.TextPath="Label" AutomationProperties.Name="Recipient">
+          <ComboBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Label}"/><TextBlock Text="{Binding Detail}" Foreground="{DynamicResource Muted}" FontSize="10" Margin="0,2,0,0"/></StackPanel></DataTemplate></ComboBox.ItemTemplate>
+         </ComboBox>
+         <Button Grid.Column="2" Content="×" Click="RemoveRule_Click" Style="{StaticResource Quiet}" FontSize="21" Padding="7,3" ToolTip="Remove keypress" AutomationProperties.Name="Remove recipient"/>
+         <Grid Grid.Row="1" Grid.Column="1" Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <StackPanel><TextBlock Text="Hold Key(s)" Style="{StaticResource Hint}" Margin="0,0,0,4"/><local:ModifierPicker Value="{Binding Modifiers, Mode=TwoWay}" AutomationProperties.Name="Modifiers to hold"/></StackPanel>
+          <StackPanel Grid.Column="2"><TextBlock Text="Click Key" Style="{StaticResource Hint}" Margin="0,0,0,4"/><ComboBox IsSynchronizedWithCurrentItem="False" ItemsSource="{Binding SupportedKeys, RelativeSource={RelativeSource AncestorType=Window}}" SelectedItem="{Binding Key, Mode=TwoWay}" FontSize="14" FontWeight="SemiBold" MaxDropDownHeight="320" IsTextSearchEnabled="True" AutomationProperties.Name="Key to send"/></StackPanel>
+         </Grid>
+         <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding ConflictMessage}" Foreground="{DynamicResource Error}" FontSize="11" TextWrapping="Wrap"><TextBlock.Style><Style TargetType="TextBlock">
+          <Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding HasConflict}" Value="True"><Setter Property="Visibility" Value="Visible"/><Setter Property="Margin" Value="0,8,0,0"/></DataTrigger></Style.Triggers>
+         </Style></TextBlock.Style></TextBlock>
+        </Grid></Border>
+       </DataTemplate></ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <Button x:Name="AddRecipientControl" Content="＋  Add keypress" HorizontalAlignment="Left" Click="AddRecipient_Click" Style="{StaticResource Quiet}" Padding="0,6,10,6" ToolTip="Add another character or the next keypress for the same character."/>
+      <TextBlock x:Name="ButtonValidationMessage" Foreground="{DynamicResource Error}" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+      </StackPanel>
+     </StackPanel>
+    </ScrollViewer>
+   </Border>
+   <Border x:Name="GroupEditor" Grid.Row="2" Grid.Column="2" Visibility="Collapsed" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="24,18">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="GroupEditorHost"/></ScrollViewer>
+   </Border>
+   <Border x:Name="EmptyButtonState" Grid.Row="2" Grid.Column="2" Visibility="Collapsed" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="32">
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="370">
+     <TextBlock x:Name="EmptyHeading" Text="Create your first standalone button" FontSize="23" FontWeight="SemiBold" TextWrapping="Wrap"/>
+     <TextBlock x:Name="EmptyHint" Text="A button with its own mappings, visibility and position. No bar required." Style="{StaticResource Hint}" FontSize="14" Margin="0,12,0,22"/>
+     <Button x:Name="EmptyAddControl" Content="＋  Add button" Style="{StaticResource Primary}" HorizontalAlignment="Left" Click="AddButton_Click"/>
+     <Button x:Name="EmptyClearSearch" Content="Clear search" HorizontalAlignment="Left" Click="ClearSearch_Click" Visibility="Collapsed"/>
+    </StackPanel>
+   </Border>
+  </Grid>
+  <Grid x:Name="PlacementView" Grid.Row="1" Margin="26,22,26,0" Visibility="Collapsed">
+   <Grid.ColumnDefinitions><ColumnDefinition Width="240"/><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Border CornerRadius="12" Background="{DynamicResource Sidebar}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="22">
+    <StackPanel>
+     <TextBlock Text="POSITIONING" Foreground="{DynamicResource Muted}" FontSize="11" FontWeight="SemiBold" Margin="0,3,0,22"/>
+     <TextBlock x:Name="PlacementTargetName" Text="Team bar" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap"/>
+     <TextBlock x:Name="PlacementTargetHint" Text="Applies to the whole bar." Style="{StaticResource Hint}" Margin="0,10,0,24"/>
+     <Border Height="1" Background="{DynamicResource Line}" Margin="0,0,0,22"/>
+     <TextBlock Text="Your mappings stay yours" FontWeight="SemiBold" TextWrapping="Wrap"/>
+     <TextBlock Text="Following a character only changes where this control appears. Recipients and persona visibility keep their own rules." Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+    </StackPanel>
+   </Border>
+   <Border Grid.Column="2" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="28,24">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,5,0"><StackPanel>
+     <TextBlock Text="Keep it with your character" FontSize="26" FontWeight="SemiBold" TextWrapping="Wrap"/>
+     <TextBlock Text="Follow a game window when it moves or changes size." Style="{StaticResource Hint}" FontSize="14" Margin="0,8,0,23"/>
+     <TextBlock Text="Placement" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,0,0,7"/>
+     <ComboBox IsSynchronizedWithCurrentItem="False" x:Name="PlacementCharacter" DisplayMemberPath="Label" SelectionChanged="PlacementCharacter_Changed" AutomationProperties.Name="Character to follow"/>
+     <TextBlock x:Name="PlacementCurrentHint" Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+     <StackPanel x:Name="FollowDetails" Margin="0,24,0,0">
+      <Border Background="{DynamicResource PreviewSurface}" BorderBrush="{DynamicResource PreviewBorder}" BorderThickness="1" CornerRadius="9" Padding="18">
+       <StackPanel>
+        <TextBlock Text="SAVED PLACEMENT FIRST" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Success}"/>
+        <TextBlock Text="1   A position saved for this monitor wins." FontWeight="SemiBold" Margin="0,12,0,8" TextWrapping="Wrap"/>
+        <TextBlock Text="2   On a new monitor, use the same relative location." FontWeight="SemiBold" TextWrapping="Wrap"/>
+        <TextBlock Text="Placement adapts to the visible game area. Controls keep their size; an oversized control keeps its header within reach." Style="{StaticResource Hint}" Margin="0,12,0,0"/>
+       </StackPanel>
+      </Border>
+      <DockPanel Margin="0,25,0,12"><TextBlock Text="Saved monitors" FontSize="17" FontWeight="SemiBold"/><Button Content="↻  Refresh" Click="RefreshPlacements_Click" Style="{StaticResource Quiet}" HorizontalAlignment="Right" Padding="8,3" MinHeight="28"/></DockPanel>
+      <ItemsControl x:Name="SavedScreenList"><ItemsControl.ItemTemplate><DataTemplate>
+       <Border Background="{DynamicResource Field}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,9">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="{Binding Detail}" Style="{StaticResource Hint}" Margin="0,5,0,0"/></StackPanel>
+         <TextBlock Grid.Column="1" Text="Saved" Foreground="{DynamicResource Success}" FontSize="11" VerticalAlignment="Center" Margin="15,0,0,0"/>
+        </Grid>
+       </Border>
+      </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+      <TextBlock x:Name="NoScreenPositions" Text="No monitor overrides yet. The first placement uses a proportional fallback." Style="{StaticResource Hint}" Margin="0,4,0,14"/>
+      <Border Background="{DynamicResource Field}" CornerRadius="8" Padding="16" Margin="0,8,0,0"><StackPanel>
+       <TextBlock Text="Drag once. Remember for this monitor." FontWeight="SemiBold" TextWrapping="Wrap"/>
+       <TextBlock Text="Drag the floating control by its header. Its position is saved for that character on that monitor. Automatic moves never replace a saved placement." Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+      </StackPanel></Border>
+     </StackPanel>
+    </StackPanel></ScrollViewer>
+   </Border>
+  </Grid>
+  <Grid x:Name="GeneralSettingsView" Grid.Row="1" Margin="26,22,26,0" Visibility="Collapsed">
+   <Grid.ColumnDefinitions><ColumnDefinition Width="220"/><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Border CornerRadius="12" Background="{DynamicResource Sidebar}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="18">
+    <StackPanel>
+     <TextBlock Text="SETTINGS" FontSize="11" Foreground="{DynamicResource Muted}" FontWeight="SemiBold" Margin="7,4,0,18"/>
+     <Button x:Name="GeneralPreferencesNav" Content="General" Click="GeneralPreferences_Click"/>
+     <Button x:Name="MemoryPreferencesNav" Content="Memory Reading" Click="MemoryPreferences_Click" Margin="0,8,0,0"/>
+     <Button x:Name="FloatingPreferencesNav" Content="Floating controls" Click="FloatingPreferences_Click" Margin="0,8,0,0"/>
+     <TextBlock Text="Applies across Team Bar" Style="{StaticResource Hint}" Margin="8,22,0,0"/>
+    </StackPanel>
+   </Border>
+   <Border x:Name="GeneralPreferencePanel" Grid.Column="2" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="28,24">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,5,0">
+     <StackPanel>
+      <TextBlock Text="Appearance" FontSize="28" FontWeight="SemiBold"/>
+      <TextBlock Text="A shared look for settings, buttons, groups, and spell overlays." Style="{StaticResource Hint}" FontSize="13" Margin="0,7,0,16"/>
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+       <RadioButton x:Name="DarkThemeChoice" GroupName="Appearance" Tag="Dark" Style="{StaticResource ThemeChoice}" Checked="Theme_Changed" AutomationProperties.Name="Dark appearance">
+        <StackPanel>
+         <!-- These two miniature previews deliberately keep their own colors in both themes. -->
+         <Border Background="#10171E" BorderBrush="#3D535F" BorderThickness="1" CornerRadius="7" Height="80" Padding="11">
+          <Grid><Grid.RowDefinitions><RowDefinition Height="20"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+           <StackPanel Orientation="Horizontal"><Rectangle Fill="#7CDCC5" Width="9" Height="9"/><Rectangle Fill="#A2B2C1" Width="57" Height="5" Margin="7,0,0,0"/></StackPanel>
+           <Grid Grid.Row="1" Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Background="#18222C" CornerRadius="4"/><Border Grid.Column="2" Background="#18222C" CornerRadius="4" Padding="9"><StackPanel><Border Height="8" Background="#506675" CornerRadius="3" Margin="0,3,12,9"/><Border Height="18" Background="#111B24" CornerRadius="3" Margin="0,0,0,6"/><Border Height="18" Background="#213B39" CornerRadius="3"/></StackPanel></Border>
+           </Grid>
+          </Grid>
+         </Border>
+         <TextBlock Text="Dark" FontSize="17" FontWeight="SemiBold" Margin="0,16,0,5"/>
+         <TextBlock Text="Slate surfaces and soft teal accents." Style="{StaticResource Hint}" Margin="0,0,0,14"/>
+        </StackPanel>
+       </RadioButton>
+       <RadioButton x:Name="LightThemeChoice" Grid.Column="2" GroupName="Appearance" Tag="Light" Style="{StaticResource ThemeChoice}" Checked="Theme_Changed" AutomationProperties.Name="Light appearance">
+        <StackPanel>
+         <Border Background="#F3F6F8" BorderBrush="#B5C6D0" BorderThickness="1" CornerRadius="7" Height="80" Padding="11">
+          <Grid><Grid.RowDefinitions><RowDefinition Height="20"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+           <StackPanel Orientation="Horizontal"><Rectangle Fill="#176B5A" Width="9" Height="9"/><Rectangle Fill="#506675" Width="57" Height="5" Margin="7,0,0,0"/></StackPanel>
+           <Grid Grid.Row="1" Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Background="#E2EAEF" CornerRadius="4"/><Border Grid.Column="2" Background="#FFFFFF" BorderBrush="#D4DFE5" BorderThickness="1" CornerRadius="4" Padding="9"><StackPanel><Border Height="8" Background="#718D9C" CornerRadius="3" Margin="0,3,12,9"/><Border Height="18" Background="#EDF2F4" CornerRadius="3" Margin="0,0,0,6"/><Border Height="18" Background="#D5EAE3" CornerRadius="3"/></StackPanel></Border>
+           </Grid>
+          </Grid>
+         </Border>
+         <TextBlock Text="Light" FontSize="17" FontWeight="SemiBold" Margin="0,16,0,5"/>
+         <TextBlock Text="Bright surfaces and deep green accents." Style="{StaticResource Hint}" Margin="0,0,0,14"/>
+        </StackPanel>
+       </RadioButton>
+      </Grid>
+      <Border Background="{DynamicResource Field}" CornerRadius="8" Padding="16" Margin="0,24,0,0">
+       <StackPanel><TextBlock Text="Saved for you" FontWeight="SemiBold" FontSize="13"/><TextBlock Text="Your preferences are remembered on this computer across all of your teams." Style="{StaticResource Hint}" Margin="0,6,0,0"/></StackPanel>
+      </Border>
+      <Border Height="1" Background="{DynamicResource Line}" Margin="0,24"/>
+      <StackPanel>
+       <TextBlock Text="Updates" FontSize="22" FontWeight="SemiBold"/>
+       <TextBlock x:Name="UpdateInstalledVersion" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+       <TextBlock x:Name="UpdateChannel" Style="{StaticResource Hint}" Margin="0,4,0,14"/>
+       <CheckBox x:Name="AutoCheckUpdates" Content="Check automatically once a day" Style="{StaticResource FloatingToggle}" Checked="AutoCheckUpdates_Changed" Unchecked="AutoCheckUpdates_Changed"/>
+       <TextBlock x:Name="UpdateStatus" Text="Checking update availability…" Style="{StaticResource Hint}" Margin="0,14,0,0"/>
+       <TextBlock x:Name="UpdateRequirements" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+       <TextBlock x:Name="UpdateReleaseNotes" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+       <WrapPanel Margin="0,14,0,0">
+        <Button x:Name="CheckUpdatesButton" Content="Check for updates" Click="CheckUpdates_Click" IsEnabled="False" Margin="0,0,8,8"/>
+        <Button x:Name="InstallUpdateButton" Content="Install when I exit" Click="InstallUpdate_Click" IsEnabled="False" Margin="0,0,8,8"/>
+        <Button x:Name="CancelUpdateButton" Content="Cancel queued update" Click="CancelUpdate_Click" Visibility="Collapsed" Margin="0,0,0,8"/>
+       </WrapPanel>
+       <TextBlock Text="Updates install after you choose Exit Team Bar. Your profiles and preferences are backed up before installation." Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+      </StackPanel>
+      <Border Height="1" Background="{DynamicResource Line}" Margin="0,24"/>
+      <TextBlock Text="Bring your settings" FontSize="22" FontWeight="SemiBold"/>
+      <TextBlock Text="Copy existing profiles, spell overlays, or preferences into this installation. Your original files are kept." Style="{StaticResource Hint}" Margin="0,8,0,14"/>
+      <WrapPanel>
+       <Button Content="Import existing profiles…" Click="ImportProfilesClick" Margin="0,0,8,8"/>
+       <Button Content="Import spell overlays…" Click="ImportSpellOverlaysClick" Margin="0,0,8,8"/>
+       <Button Content="Import preferences…" Click="ImportPreferencesClick" Margin="0,0,0,8"/>
+      </WrapPanel>
+     </StackPanel>
+    </ScrollViewer>
+   </Border>
+   <Border x:Name="MemoryPreferencePanel" Grid.Column="2" Visibility="Collapsed" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="28,24">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,5,0"><StackPanel>
+     <TextBlock Text="Memory Reading" FontSize="28" FontWeight="SemiBold"/>
+     <TextBlock Text="Choose which features can read EverQuest game data." Style="{StaticResource Hint}" Margin="0,7,0,22"/>
+     <CheckBox x:Name="ScreenDetectionChoice" Content="Enable Screen Detection" Tag="ScreenDetection" Style="{StaticResource FloatingToggle}" Checked="MemoryFeature_Changed" Unchecked="MemoryFeature_Changed"/>
+     <TextBlock Text="Reads the character name and class in each EQ window so Team Bar can match it to your hot keys and saved screen slots as characters log in. You can also assign windows manually." Style="{StaticResource Hint}" Margin="29,6,0,18"/>
+     <CheckBox x:Name="SpellBarDataChoice" Content="Enable Spell Bar Data" Tag="SpellBarData" Style="{StaticResource FloatingToggle}" Checked="MemoryFeature_Changed" Unchecked="MemoryFeature_Changed"/>
+     <TextBlock Text="Reads character, target, and spell information to keep your spell bars up to date." Style="{StaticResource Hint}" Margin="29,6,0,18"/>
+     <CheckBox x:Name="DataCollectionChoice" Content="Enable Data Collection" Tag="DataCollection" Style="{StaticResource FloatingToggle}" Checked="MemoryFeature_Changed" Unchecked="MemoryFeature_Changed"/>
+     <TextBlock Text="Opens the Data Collection tab so you can capture item, recipe, NPC, and drop information from EQ." Style="{StaticResource Hint}" Margin="29,6,0,18"/>
+     <Border Background="{DynamicResource WarningSurface}" CornerRadius="8" Padding="14">
+      <TextBlock Text="Reading game memory may violate the game’s Terms of Service. Enable it only if you understand and accept that risk. Team Bar cannot guarantee approval or protection from account action." Foreground="{DynamicResource WarningText}" FontSize="12" TextWrapping="Wrap"/>
+     </Border>
+     <TextBlock Text="Input delivery uses a hook inside the game process regardless of these settings." Style="{StaticResource Hint}" FontSize="12" Margin="0,12,0,0"/>
+     <TextBlock Margin="0,8,0,0" FontSize="12"><Hyperlink Foreground="{DynamicResource Accent}" NavigateUri="https://www.daybreakgames.com/terms-of-service" RequestNavigate="GameTerms_Navigate">Read Daybreak’s Terms of Service ↗</Hyperlink></TextBlock>
+    </StackPanel></ScrollViewer>
+   </Border>
+  </Grid>
+  <Border x:Name="FloatingPreferencePanel" Grid.Row="1" Margin="268,22,26,0" Visibility="Collapsed" CornerRadius="12" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PanelLine}" BorderThickness="1" Padding="28,24">
+   <ScrollViewer x:Name="FloatingSettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,5,0"><StackPanel>
+    <TextBlock Text="Floating controls" FontSize="28" FontWeight="SemiBold"/>
+    <TextBlock Text="A consistent look for every team bar and standalone button." Style="{StaticResource Hint}" FontSize="14" Margin="0,7,0,22"/>
+    <TextBlock Text="Buttons, groups, and spell overlays follow the app’s light or dark appearance. Change it in General." Style="{StaticResource Hint}" Margin="0,0,0,12"/>
+    <Border Background="{DynamicResource AppBackground}" CornerRadius="9" Margin="0,0,0,8" Padding="5"><Image x:Name="FloatingPreview" Stretch="Uniform" AutomationProperties.Name="Preview of a team bar and standalone button"/></Border>
+    <TextBlock x:Name="FloatingPreviewCaption" Style="{StaticResource Hint}" FontSize="11" Margin="0,0,0,18"/>
+    <Grid Margin="0,5,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <StackPanel><DockPanel><TextBlock Text="Control size" FontWeight="SemiBold"/><TextBlock x:Name="FloatingSizeText" Text="100%" HorizontalAlignment="Right" Foreground="{DynamicResource Muted}"/></DockPanel>
+      <Slider x:Name="FloatingSize" Style="{StaticResource FloatingSlider}" Minimum="65" Maximum="175" Value="100" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="FloatingValue_Changed" Margin="0,13,0,5" AutomationProperties.Name="Floating control size"/>
+      <TextBlock Text="65% – 175% · scales buttons and text together" Style="{StaticResource Hint}" FontSize="11"/>
+     </StackPanel>
+     <StackPanel Grid.Column="2"><DockPanel><TextBlock Text="Opacity" FontWeight="SemiBold"/><TextBlock x:Name="FloatingOpacityText" Text="100%" HorizontalAlignment="Right" Foreground="{DynamicResource Muted}"/></DockPanel>
+      <Slider x:Name="FloatingOpacity" Style="{StaticResource FloatingSlider}" Minimum="35" Maximum="100" Value="100" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="FloatingValue_Changed" Margin="0,13,0,5" AutomationProperties.Name="Floating control opacity"/>
+      <TextBlock Text="35% – 100% · clicks stay inside the controls" Style="{StaticResource Hint}" FontSize="11"/>
+     </StackPanel>
+    </Grid>
+    <Border Height="1" Background="{DynamicResource Line}" Margin="0,23,0,20"/>
+    <CheckBox x:Name="FloatingLocked" Style="{StaticResource FloatingToggle}" Content="Lock control positions" FontWeight="SemiBold" Checked="FloatingToggle_Changed" Unchecked="FloatingToggle_Changed"/>
+    <TextBlock Text="Prevent accidental dragging. Controls can still follow their assigned character." Style="{StaticResource Hint}" Margin="25,6,0,18"/>
+    <CheckBox x:Name="FloatingHideHeaders" Style="{StaticResource FloatingToggle}" Content="Hide movement headers" FontWeight="SemiBold" Checked="FloatingToggle_Changed" Unchecked="FloatingToggle_Changed"/>
+    <TextBlock Text="Show just the buttons. Turn this off here to move them again." Style="{StaticResource Hint}" Margin="25,6,0,15"/>
+   </StackPanel></ScrollViewer>
+  </Border>
+  <Grid x:Name="EditorFooter" Grid.Row="2" Margin="28,16,28,18"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+   <StackPanel VerticalAlignment="Center" Margin="0,0,22,0"><TextBlock x:Name="SaveState" Text="All changes saved" Foreground="{DynamicResource Success}" FontSize="12"/><TextBlock x:Name="StatusText" Text="Apply your changes, then click a button to send its key." Style="{StaticResource Hint}" Margin="0,5,0,0"/></StackPanel>
+   <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Button x:Name="ReviewDraftControl" Content="Review unfinished" Visibility="Collapsed" Click="ReviewDraft_Click" Margin="0,0,10,0"/><Button x:Name="SaveControl" Visibility="Collapsed" Content="Save changes" Click="Save_Click" Margin="0,0,10,0"/><Button x:Name="ApplyControl" Content="Connect hot keys   →" Style="{StaticResource Primary}" Click="Apply_Click" Padding="22,11" ToolTipService.ShowOnDisabled="True"/></StackPanel>
+  </Grid>
+  <StackPanel x:Name="SettingsFooter" Grid.Row="2" Margin="28,16,28,18" VerticalAlignment="Center" Visibility="Collapsed">
+   <TextBlock x:Name="SettingsState" Text="Preferences are saved automatically" Foreground="{DynamicResource Success}" FontSize="12"/>
+   <TextBlock x:Name="SettingsFeedback" Text="No need to restart or reapply your team." Style="{StaticResource Hint}" Margin="0,5,0,0"/>
+  </StackPanel>
+ </Grid>
+ </Grid></DockPanel>
+</Window>
+

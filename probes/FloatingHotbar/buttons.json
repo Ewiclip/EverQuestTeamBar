@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "buttons": [
+    {
+      "id": "split-action",
+      "label": "Split action",
+      "targets": [
+        { "character": "Runa", "key": "1" },
+        { "character": "Fellwort", "key": "2" }
+      ]
+    },
+    {
+      "id": "invisibility",
+      "label": "Invisibility",
+      "targets": [
+        { "character": "Runa", "key": "5" },
+        { "character": "Fellwort", "key": "5" }
+      ]
+    }
+  ]
+}
