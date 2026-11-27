@@ -172,6 +172,7 @@ internal static class ReleaseUpdateTests
         await RejectSync(() => ReleaseUpdateHandoff.Apply(() => throw new IOException("Fixture EQ still open."),
             () => throw new InvalidOperationException("Verification must not run."), () => { }, () => launched = true));
         Check(!launched, "A native update blocked by an open game never launches the installer.");
+        await GitHubReleaseNoticesTests.Run(Check);
         File.WriteAllText(Path.Combine(directory, "results.json"), JsonSerializer.Serialize(new { passed = true, checks = results.Count, results }, new JsonSerializerOptions { WriteIndented = true }));
     }
 

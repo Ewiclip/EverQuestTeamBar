@@ -8,6 +8,7 @@ param(
     [string]$NativeRuntimeDirectory,
     [string]$DotNetPath = 'dotnet',
     [ValidateSet('beta', 'stable')][string]$Channel = 'stable',
+    [switch]$GitHubReleaseNotices,
     [uri]$ReleaseFeedBaseUrl,
     [ValidatePattern('^[A-Fa-f0-9]{64}$')][string]$ReleaseManifestSignerSha256
 )
@@ -23,6 +24,9 @@ foreach ($name in @('TeamBridge.dll', 'TeamControllerHost.dll')) {
 }
 if ($ReleaseFeedBaseUrl -and ($ReleaseFeedBaseUrl.Scheme -ne 'https' -or $ReleaseFeedBaseUrl.UserInfo -or $ReleaseFeedBaseUrl.Query -or $ReleaseFeedBaseUrl.Fragment)) { throw 'Release feed URL must be HTTPS without credentials, queries or fragments.' }
 if ([bool]$ReleaseFeedBaseUrl -ne [bool]$ReleaseManifestSignerSha256) { throw 'Configure both the update feed URL and its trusted manifest signer, or omit both for manual updates.' }
+if ($GitHubReleaseNotices -and ($Channel -ne 'beta' -or $Version -cnotmatch '^\d+\.\d+\.\d+-beta\.(0|[1-9]\d*)$' -or $ReleaseFeedBaseUrl)) {
+    throw 'GitHub release notices require a numbered beta build with no signed update feed.'
+}
 $dotnet = (Get-Command $DotNetPath -ErrorAction Stop).Source
 $sdkVersion = & $dotnet --version
 if ($LASTEXITCODE -ne 0 -or $sdkVersion -notmatch '^10\.0\.\d+$') { throw 'Publish with a supported .NET 10 LTS SDK.' }
@@ -38,6 +42,7 @@ $arguments = @('publish', $project, '-c', 'Release', '-r', 'win-x64', '--self-co
 if ($ReleaseFeedBaseUrl) {
     $arguments += @(('-p:ReleaseFeedBaseUrl=' + $ReleaseFeedBaseUrl.AbsoluteUri), ('-p:ReleaseManifestSignerSha256=' + $ReleaseManifestSignerSha256))
 }
+if ($GitHubReleaseNotices) { $arguments += '-p:GitHubReleaseNotices=true' }
 & $dotnet @arguments
 if ($LASTEXITCODE -ne 0) { throw 'Self-contained release publication failed; the incomplete output was retained for diagnosis.' }
 $assetsFile = & $dotnet msbuild $project -nologo -p:Configuration=Release -p:RuntimeIdentifier=win-x64 -p:TeamBarReleaseBuild=true -getProperty:ProjectAssetsFile

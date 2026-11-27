@@ -39,7 +39,10 @@ public partial class SetupWindow
         finally { changingUpdateChoice = false; }
         AutoCheckUpdates.IsEnabled = updates.IsConfigured && !updates.Busy;
         CheckUpdatesButton.IsEnabled = updates.IsConfigured && !updates.Busy && !updates.IsQueued;
+        InstallUpdateButton.Visibility = InstallUpdateHint.Visibility = updates.CanInstallUpdates ? W.Visibility.Visible : W.Visibility.Collapsed;
         InstallUpdateButton.IsEnabled = updates.Available is not null && !updates.Busy && !updates.IsQueued && TeamBarApplication.Current is not null;
+        OpenReleaseButton.Visibility = updates.Notice is not null ? W.Visibility.Visible : W.Visibility.Collapsed;
+        OpenReleaseButton.IsEnabled = !updates.Busy;
         CancelUpdateButton.Visibility = updates.IsQueued ? W.Visibility.Visible : W.Visibility.Collapsed;
         CancelUpdateButton.IsEnabled = !updates.Busy;
     }
@@ -48,6 +51,12 @@ public partial class SetupWindow
     { if (!review) await ReleaseUpdateCoordinator.Shared.Check(manual: true); }
     private async void InstallUpdate_Click(object sender, W.RoutedEventArgs e)
     { if (!review && TeamBarApplication.Current is not null) await ReleaseUpdateCoordinator.Shared.QueueForExit(); }
+    private void OpenRelease_Click(object sender, W.RoutedEventArgs e)
+    {
+        if (review || ReleaseUpdateCoordinator.Shared is not { Busy: false, Notice: { } notice }) return;
+        try { using var browser = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(notice.ReleasePage.AbsoluteUri) { UseShellExecute = true }); }
+        catch (Exception error) { UpdateStatus.Text = "Could not open the release page. " + error.Message; }
+    }
     private void CancelUpdate_Click(object sender, W.RoutedEventArgs e)
     { if (!review) ReleaseUpdateCoordinator.Shared.CancelQueued(); }
     private void AutoCheckUpdates_Changed(object sender, W.RoutedEventArgs e)

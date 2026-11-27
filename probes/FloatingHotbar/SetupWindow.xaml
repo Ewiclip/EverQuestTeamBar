@@ -698,10 +698,11 @@
        <TextBlock x:Name="UpdateReleaseNotes" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
        <WrapPanel Margin="0,14,0,0">
         <Button x:Name="CheckUpdatesButton" Content="Check for updates" Click="CheckUpdates_Click" IsEnabled="False" Margin="0,0,8,8"/>
-        <Button x:Name="InstallUpdateButton" Content="Install when I exit" Click="InstallUpdate_Click" IsEnabled="False" Margin="0,0,8,8"/>
+        <Button x:Name="OpenReleaseButton" Content="View release on GitHub" Click="OpenRelease_Click" Visibility="Collapsed" Margin="0,0,8,8"/>
+        <Button x:Name="InstallUpdateButton" Content="Install when I exit" Click="InstallUpdate_Click" Visibility="Collapsed" IsEnabled="False" Margin="0,0,8,8"/>
         <Button x:Name="CancelUpdateButton" Content="Cancel queued update" Click="CancelUpdate_Click" Visibility="Collapsed" Margin="0,0,0,8"/>
        </WrapPanel>
-       <TextBlock Text="Updates install after you choose Exit Team Bar. Your profiles and preferences are backed up before installation." Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+       <TextBlock x:Name="InstallUpdateHint" Text="Updates install after you choose Exit Team Bar. Your profiles and preferences are backed up before installation." Visibility="Collapsed" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
       </StackPanel>
       <Border Height="1" Background="{DynamicResource Line}" Margin="0,24"/>
       <TextBlock Text="Bring your settings" FontSize="22" FontWeight="SemiBold"/>

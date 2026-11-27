@@ -9,12 +9,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: team-bar-pages
+  # A notice-only release must not replace a signed publication waiting for this group.
+  group: >-
+    ${{ (github.event_name == 'workflow_dispatch' || (github.event.release.prerelease &&
+    (contains(github.event.release.assets.*.name, 'manifest.json') ||
+    contains(github.event.release.assets.*.name, 'manifest.json.p7s')))) && 'team-bar-pages' || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   stage:
-    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease
+    if: >-
+      github.event_name == 'workflow_dispatch' || (github.event.release.prerelease &&
+      (contains(github.event.release.assets.*.name, 'manifest.json') ||
+      contains(github.event.release.assets.*.name, 'manifest.json.p7s')))
     runs-on: windows-latest
     permissions:
       contents: read
@@ -32,6 +39,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SITE_BASE_URL: ${{ steps.pages.outputs.base_url }}
           MANIFEST_SIGNER_SHA256: ${{ vars.BETA_MANIFEST_SIGNER_SHA256 }}
+          PUBLISHED_TAG: ${{ github.event.release.tag_name }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:MANIFEST_SIGNER_SHA256 -notmatch '^[0-9a-f]{64}$') {
@@ -42,16 +50,29 @@ jobs:
           $pages = ($json -join "`n") | ConvertFrom-Json -NoEnumerate
           $releases = foreach ($page in $pages) {
               foreach ($release in $page) {
-                  if ($release.draft -or !$release.prerelease -or $release.tag_name -cnotmatch '^v(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?)\z') { continue }
+                  if ($release.draft -or !$release.prerelease) { continue }
+                  $names = @($release.assets.name)
+                  if ($names -notcontains 'manifest.json' -and $names -notcontains 'manifest.json.p7s') { continue }
+                  if ($release.tag_name -cnotmatch '^v(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?)\z') { throw 'A signed beta release has an invalid tag.' }
                   $version = $Matches[1]
                   $parsed = $null
-                  if (![semver]::TryParse($version, [ref]$parsed) -or $parsed.ToString() -cne $version) { continue }
+                  if ($version.Length -gt 80 -or ![semver]::TryParse($version, [ref]$parsed) -or $parsed.ToString() -cne $version) {
+                      throw 'A signed beta release has an invalid version.'
+                  }
+                  foreach ($required in @('manifest.json', 'manifest.json.p7s', "TeamBar-$version-win-x64-Setup.exe")) {
+                      if (@($release.assets | Where-Object { $_.name -ceq $required -and $_.state -ceq 'uploaded' }).Count -ne 1) {
+                          throw "Incomplete signed bundle for $($release.tag_name): expected $required."
+                      }
+                  }
                   $metadata = $release.assets | Where-Object name -CEQ 'manifest.json'
                   [pscustomobject]@{ Tag = $release.tag_name; Version = $parsed; Manifest = $metadata }
               }
           }
           $ordered = @($releases | Sort-Object Version -Descending)
           if (!$ordered.Count) { throw 'Publish a tagged beta prerelease with a signed update bundle first.' }
+          if ($env:PUBLISHED_TAG -and $ordered.Tag -cnotcontains $env:PUBLISHED_TAG) {
+              throw 'The signed release that triggered this publication could not be found. Retry once all assets are visible.'
+          }
           $sources = @()
           foreach ($release in $ordered) {
               $current = $release.Tag -ceq $ordered[0].Tag
@@ -66,6 +87,21 @@ jobs:
           ./installer/Stage-BetaUpdateFeed.ps1 -Version $ordered[0].Version.ToString() -ReleaseDirectory $sources[0] `
               -PreviousReleaseDirectories @($sources | Select-Object -Skip 1) -SiteBaseUrl $env:SITE_BASE_URL `
               -ManifestSignerSha256 $env:MANIFEST_SIGNER_SHA256 -SiteDirectory (Join-Path $env:RUNNER_TEMP 'pages')
+          # The served version can veto a rollback if a higher release was removed.
+          # Only the independently verified release assets above supply bytes to deploy.
+          $existing = Join-Path $env:RUNNER_TEMP 'previous-beta-manifest.json'
+          $manifestUrl = $env:SITE_BASE_URL.TrimEnd('/') + '/updates/beta/manifest.json'
+          $status = curl.exe --silent --show-error --proto '=https' --max-time 30 --max-filesize 2097152 `
+              --output $existing --write-out '%{http_code}' $manifestUrl
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check the currently served beta feed.' }
+          if ($status -eq '200') {
+              $served = Get-Content -Raw -LiteralPath $existing | ConvertFrom-Json
+              $version = $null
+              if ($served.product -cne 'team-bar' -or $served.channel -cne 'beta' -or ![semver]::TryParse($served.version, [ref]$version)) {
+                  throw 'Could not establish the currently served Team Bar beta version.'
+              }
+              if ($version -gt $ordered[0].Version) { throw "The Pages feed already serves a higher version ($version)." }
+          } elseif ($status -ne '404') { throw "Could not establish the current beta feed version (HTTP $status)." }
       - uses: actions/upload-pages-artifact@v4
         with:
           path: ${{ runner.temp }}/pages

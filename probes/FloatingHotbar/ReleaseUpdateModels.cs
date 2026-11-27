@@ -12,15 +12,24 @@ internal sealed record ReleaseUpdateConfiguration(Uri FeedBase, string ManifestS
     internal static string InstalledVersion => typeof(ReleaseUpdateConfiguration).Assembly
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.0.0";
 
+    private static readonly Dictionary<string, string> metadata = typeof(ReleaseUpdateConfiguration).Assembly
+        .GetCustomAttributes<AssemblyMetadataAttribute>().ToDictionary(value => value.Key, value => value.Value ?? "", StringComparer.Ordinal);
+
+    internal static bool GitHubNoticesEnabled =>
+        string.Equals(metadata.GetValueOrDefault("GitHubReleaseNotices"), "true", StringComparison.OrdinalIgnoreCase) &&
+        metadata.GetValueOrDefault("ReleaseChannel") == "beta" &&
+        string.IsNullOrWhiteSpace(metadata.GetValueOrDefault("ReleaseFeedBaseUrl")) &&
+        string.IsNullOrWhiteSpace(metadata.GetValueOrDefault("ReleaseManifestSignerSha256"));
+
     // Trust is compiled into the signed application. Neither user preferences nor the feed can change it.
     internal static ReleaseUpdateConfiguration? ReadAssembly()
     {
-        var values = typeof(ReleaseUpdateConfiguration).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-            .ToDictionary(value => value.Key, value => value.Value ?? "", StringComparer.Ordinal);
-        if (!values.TryGetValue("ReleaseFeedBaseUrl", out var feed) || string.IsNullOrWhiteSpace(feed)) return null;
-        var result = new ReleaseUpdateConfiguration(new Uri(feed, UriKind.Absolute), values.GetValueOrDefault("ReleaseManifestSignerSha256", ""),
-            values.GetValueOrDefault("ReleaseChannel", ""), InstalledVersion, values.GetValueOrDefault("NativeBridgeHash", ""),
-            values.GetValueOrDefault("NativeCollectorHash", ""));
+        var feed = metadata.GetValueOrDefault("ReleaseFeedBaseUrl", "");
+        var signer = metadata.GetValueOrDefault("ReleaseManifestSignerSha256", "");
+        if (string.IsNullOrWhiteSpace(feed) && string.IsNullOrWhiteSpace(signer)) return null;
+        var result = new ReleaseUpdateConfiguration(new Uri(feed, UriKind.Absolute), signer,
+            metadata.GetValueOrDefault("ReleaseChannel", ""), InstalledVersion, metadata.GetValueOrDefault("NativeBridgeHash", ""),
+            metadata.GetValueOrDefault("NativeCollectorHash", ""));
         result.Validate();
         return result;
     }

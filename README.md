@@ -2,6 +2,10 @@
 
 Team Bar is a free Windows x64 desktop app for arranging EverQuest windows, floating hotkeys and spell overlays. The app keeps profiles on the local computer. Memory reading and data contributions are optional.
 
+## Beta installers
+
+Published Windows betas have a versioned Setup executable attached to their release. In a beta with GitHub release notices enabled, open **Settings → General → Updates** and choose **Check for updates**. When a newer installer is available, **View release on GitHub** opens its download page. [GitHub Releases](https://github.com/Ewiclip/EverQuestTeamBar/releases)
+
 ## Source and licensing
 
 This repository contains the desktop app, Screens, the managed sources it compiles, installer and update tooling, and tests. Start with the [illustrated guides](docs/guides/README.md) or the [installer and recovery guide](installer/README.md). The [MIT license](LICENSE) covers the original Team Bar source. The installer includes separate notices for the bundled runtimes.

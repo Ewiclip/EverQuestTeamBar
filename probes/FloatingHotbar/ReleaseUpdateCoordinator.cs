@@ -9,17 +9,20 @@ internal sealed class ReleaseUpdateCoordinator
     private static readonly Lazy<ReleaseUpdateCoordinator> shared = new(() => new());
     internal static ReleaseUpdateCoordinator Shared => shared.Value;
     private readonly ReleaseUpdateClient? client;
+    private readonly GitHubReleaseNotices? gitHub;
     private readonly DispatcherTimer? timer;
     private readonly string statePath;
     private UpdatePreferences preferences = new();
     private QueuedUpdate? queued;
-    internal bool IsConfigured => client is not null;
+    internal bool IsConfigured => client is not null || gitHub is not null;
+    internal bool CanInstallUpdates => client is not null;
     internal bool Busy { get; private set; }
     internal bool AutoCheck => preferences.AutoCheck;
     internal bool IsQueued => queued is not null;
-    internal string Channel => client?.Configuration.Channel ?? "Unconfigured";
-    internal string Status { get; private set; } = "Automatic updates are not configured for this build. A signed release feed and trusted publisher certificate are required.";
+    internal string Channel => client?.Configuration.Channel ?? (gitHub is not null ? "beta (GitHub Releases)" : "Unconfigured");
+    internal string Status { get; private set; } = "This build has no update channel configured.";
     internal ReleaseUpdateManifest? Available { get; private set; }
+    internal GitHubReleaseNotice? Notice { get; private set; }
     internal bool RequiresEverQuestClosed => Available is { } release && client is { } updater && release.RequiresEverQuestClosed(updater.Configuration);
     internal event Action? Changed;
 
@@ -34,9 +37,17 @@ internal sealed class ReleaseUpdateCoordinator
                 preferences = JsonSerializer.Deserialize<UpdatePreferences>(File.ReadAllBytes(statePath)) ?? new();
             }
             if (!InstalledAppData.IsInstalledBuild) { Status = "Update installation is available in installed builds. This development copy does not check for or install updates."; return; }
-            if (ReleaseUpdateConfiguration.ReadAssembly() is not { } configuration) return;
-            client = new(configuration);
-            Status = "Ready to check for signed updates.";
+            if (ReleaseUpdateConfiguration.ReadAssembly() is { } configuration)
+            {
+                client = new(configuration);
+                Status = "Ready to check for signed updates.";
+            }
+            else if (ReleaseUpdateConfiguration.GitHubNoticesEnabled)
+            {
+                gitHub = new();
+                Status = "Ready to check GitHub for beta releases.";
+            }
+            else return;
             timer = new DispatcherTimer { Interval = TimeSpan.FromHours(1) };
             timer.Tick += async (_, _) => await Check(manual: false);
             timer.Start();
@@ -52,21 +63,37 @@ internal sealed class ReleaseUpdateCoordinator
 
     internal async Task Check(bool manual)
     {
-        if (client is null || Busy || queued is not null) return;
+        if (!IsConfigured || Busy || queued is not null) return;
         var now = DateTimeOffset.UtcNow;
         if (!manual && (!preferences.AutoCheck || preferences.LastAttemptUtc <= now && now - preferences.LastAttemptUtc < TimeSpan.FromDays(1))) return;
-        Busy = true; Status = "Checking the trusted release feed…"; Changed?.Invoke();
+        Busy = true;
+        Status = gitHub is null ? "Checking the trusted release feed…" : "Checking GitHub for beta releases…";
+        Changed?.Invoke();
         try
         {
             // Persist attempts before networking to avoid repeated automatic retries after a failed check.
             var updated = preferences with { LastAttemptUtc = now };
             SavePreferences(updated); preferences = updated;
-            var release = await client.Check();
-            bool newer = ReleaseUpdateVersion.Parse(release.Version).CompareTo(ReleaseUpdateVersion.Parse(client.Configuration.CurrentVersion)) > 0;
-            Available = newer ? release : null;
-            Status = newer ? $"Team Bar {release.Version} is available." : "You have the latest version offered by this channel.";
+            if (client is not null)
+            {
+                var release = await client.Check();
+                bool newer = ReleaseUpdateVersion.Parse(release.Version).CompareTo(ReleaseUpdateVersion.Parse(client.Configuration.CurrentVersion)) > 0;
+                Available = newer ? release : null;
+                Status = newer ? $"Team Bar {release.Version} is available." : "You have the latest version offered by this channel.";
+            }
+            else if (gitHub is not null)
+            {
+                Notice = await gitHub.FindNewer(ReleaseUpdateConfiguration.InstalledVersion);
+                Status = Notice is null ? "No newer beta installer has been published on GitHub."
+                    : $"Team Bar {Notice.Version} is available. Open the release page to download the installer.";
+            }
         }
-        catch (Exception error) { Available = null; Status = "Could not verify an update. " + error.Message; }
+        catch (Exception error)
+        {
+            Available = null;
+            Notice = null;
+            Status = (gitHub is null ? "Could not verify an update. " : "Could not check GitHub Releases. ") + error.Message;
+        }
         finally { Busy = false; Changed?.Invoke(); }
     }
 

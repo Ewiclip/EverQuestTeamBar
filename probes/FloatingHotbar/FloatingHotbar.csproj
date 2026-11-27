@@ -36,6 +36,7 @@
     <AssemblyMetadata Include="ReleaseFeedBaseUrl" Value="$(ReleaseFeedBaseUrl)" />
     <AssemblyMetadata Include="ReleaseManifestSignerSha256" Value="$(ReleaseManifestSignerSha256)" />
     <AssemblyMetadata Include="ReleaseChannel" Value="$(ReleaseChannel)" />
+    <AssemblyMetadata Include="GitHubReleaseNotices" Value="true" Condition="'$(TeamBarReleaseBuild)' == 'true' and '$(GitHubReleaseNotices)' == 'true'" />
     <AssemblyMetadata Include="NativeBridgeHash" Value="$(NativeBridgeHash)" />
     <AssemblyMetadata Include="NativeCollectorHash" Value="$(NativeCollectorHash)" />
   </ItemGroup>
