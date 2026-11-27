@@ -48,6 +48,7 @@ internal static class AppInstanceCoordinatorTests
                 "forwarding after takeover reaches only the replacement owner");
         }
         await CrossProcess(folder, Check);
+        await CheckInstallerExit(folder, Check);
         CollectorFormat.WriteNew(full, new { passed = true, tests = checks, crossProcess = true, gameInputSent = false,
             processMemoryRead = false, processMemoryWritten = false, windowsOpened = false });
     }
@@ -57,7 +58,9 @@ internal static class AppInstanceCoordinatorTests
     // This diagnostic path is intentionally independent of TeamBarApplication:
     // no application UI, user preferences, clients or native input are opened.
     internal static void RunFixture(string scope, string report, string[] arguments)
-        => Task.Run(async () =>
+    {
+        if (arguments is ["--installer-exit-fixture"]) { RunInstallerExitFixture(report); return; }
+        Task.Run(async () =>
         {
             if (File.Exists(report)) throw new IOException("Instance fixture report must be new.");
             var routed = new ConcurrentQueue<string[]>();
@@ -72,6 +75,48 @@ internal static class AppInstanceCoordinatorTests
             }
             CollectorFormat.WriteNew(report, new FixtureReport(Environment.ProcessId, owner is not null, routed.ToArray()));
         }).GetAwaiter().GetResult();
+    }
+
+    private static void RunInstallerExitFixture(string report)
+    {
+        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+        int requests = 0;
+        InstallerExitSignal? listener = null;
+        using var active = InstallerExitSignal.Listen(dispatcher, () =>
+        {
+            if (!dispatcher.CheckAccess() || !listener!.IsRequested) throw new InvalidOperationException("Expected a latched Setup request on the host dispatcher.");
+            if (++requests == 1)
+            {
+                listener.AllowRetry(); // Model an edit that could not be saved.
+                Console.WriteLine("retry");
+                Console.Out.Flush();
+            }
+            else dispatcher.InvokeShutdown();
+        }) ?? throw new IOException("Could not create the fixture's Setup signal.");
+        listener = active;
+        Console.WriteLine(JsonSerializer.Serialize(new FixtureReport(Environment.ProcessId, true, [])));
+        Console.Out.Flush();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var stop = timeout.Token.Register(() => dispatcher.BeginInvokeShutdown(System.Windows.Threading.DispatcherPriority.Normal));
+        System.Windows.Threading.Dispatcher.Run();
+        if (requests != 2) throw new TimeoutException("The fixture did not receive two Setup requests.");
+        CollectorFormat.WriteNew(report, new FixtureReport(Environment.ProcessId, true, [["installer-exit"]]));
+    }
+
+    private static async Task CheckInstallerExit(string folder, Action<bool, string> check)
+    {
+        var report = Path.Combine(folder, "installer-exit.json");
+        await using var host = new FixtureProcess(Path.Combine(folder, "installer-scope"), report, ["--installer-exit-fixture"]);
+        var ready = await host.Ready();
+        if (ready.ProcessId != host.Process.Id || ready.ProcessId == Environment.ProcessId) throw new InvalidOperationException("Unexpected fixture process.");
+        using var signal = EventWaitHandle.OpenExisting($@"Local\TeamBar.Setup.Exit.{ready.ProcessId}");
+        signal.Set();
+        check(await host.Process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)) == "retry" && !signal.WaitOne(0),
+            "A Setup request reaches the chosen fixture and can be retried after a declined shutdown.");
+        signal.Set();
+        await host.Completed();
+        check(ReadReport(report).Routed is [["installer-exit"]], "A repeated Setup request completes orderly dispatcher shutdown in that process.");
+    }
 
     private static async Task CrossProcess(string folder, Action<bool, string> check)
     {

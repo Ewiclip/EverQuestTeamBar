@@ -13,6 +13,7 @@ internal sealed partial class TeamBarApplication : IDisposable
     private readonly F.ContextMenuStrip menu;
     private readonly F.ToolStripItem dataCollectionMenu;
     private readonly IUserSettingsStore preferences;
+    private readonly InstallerExitSignal? installerExit;
     private bool exiting, disposed, idleShutdownPending;
     private string? profile;
     private string? controller;
@@ -68,6 +69,7 @@ internal sealed partial class TeamBarApplication : IDisposable
         menu.Items.Add("Exit Team Bar", null, async (_, _) => await Exit());
         tray = new() { Icon = AppBranding.TrayIcon, Text = "Team Bar", ContextMenuStrip = menu, Visible = true };
         tray.DoubleClick += (_, _) => OpenSafely(ShowDefaultSetup);
+        installerExit = InstallerExitSignal.Listen(app.Dispatcher, () => _ = Exit());
     }
     internal static int Run(string[] args)
     {
@@ -218,7 +220,7 @@ internal sealed partial class TeamBarApplication : IDisposable
             finally { idleShutdownPending = false; }
         });
     }
-    private bool IsIdle => !exiting && !disposed && setups.Count == 0 && collector is null && activeGameView is null
+    private bool IsIdle => !exiting && !disposed && installerExit?.IsRequested != true && setups.Count == 0 && collector is null && activeGameView is null
         && SpellOverlayManagerWindow.CurrentManager is null && AppInputSession.Current is null && !AppInputSession.HasPendingReconnect;
     internal void NotifyInputRecovery(string message, string? profile = null, DetectedClient[]? identities = null)
     {
@@ -236,6 +238,7 @@ internal sealed partial class TeamBarApplication : IDisposable
     {
         if (exiting) return;
         exiting = true;
+        bool shutdownCommitted = false;
         try
         {
             foreach (var setup in setups.Values.ToArray()) { setup.CloseForExit(); if (setups.Values.Contains(setup)) return; }
@@ -243,15 +246,24 @@ internal sealed partial class TeamBarApplication : IDisposable
             { await manager.ExitOverlays(preserveLoadedState: true); if (SpellOverlayManagerWindow.CurrentManager is not null) return; }
             EndGameView();
             collector?.Close(); AppInputSession.Stop();
-            await ReleaseUpdateCoordinator.Shared.FinishExit(Backend.WaitForNativeShutdown);
+            await ReleaseUpdateCoordinator.Shared.FinishExit(Backend.WaitForNativeShutdown, () => installerExit?.IsRequested == true);
             application.Shutdown();
+            shutdownCommitted = true;
         }
         catch (Exception error) { ShowError(error); }
-        finally { exiting = false; }
+        finally
+        {
+            if (!shutdownCommitted)
+            {
+                exiting = false;
+                installerExit?.AllowRetry();
+            }
+        }
     }
     public void Dispose()
     {
         if (disposed) return; disposed = true;
+        installerExit?.Dispose();
         try
         {
             EndGameView();

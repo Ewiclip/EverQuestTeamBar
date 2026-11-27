@@ -63,6 +63,9 @@ SignedUninstaller=yes
 #endif
 
 [Files]
+#ifndef InstallerFixtureRoot
+Source: "Close-TeamBarForSetup.ps1"; Flags: dontcopy
+#endif
 #include VerifiedFilesInclude
 
 [Icons]
@@ -90,9 +93,17 @@ var
   ReleasePaths, ReleaseHashes, TransactionPaths, ExistingPaths, ExistingHashes: TStringList;
   BackupRoot, OldDisplayVersion, MigrationStaging: String;
   TransactionPrepared, TransactionStarted, TransactionCommitted, RollbackFailed, MigratedLegacyData: Boolean;
+  CloseRequestNumber: Integer;
 
 function NativeGetFileAttributes(Name: String): LongWord;
   external 'GetFileAttributesW@kernel32.dll stdcall';
+
+#ifndef InstallerFixtureRoot
+function IsWow64Process(Process: THandle; var IsWow64: Integer): Boolean;
+  external 'IsWow64Process@kernel32.dll stdcall';
+function GetCurrentProcess(): THandle;
+  external 'GetCurrentProcess@kernel32.dll stdcall';
+#endif
 
 #include VerifiedInventoryInclude
 
@@ -186,6 +197,43 @@ begin
       ((Name[Index] >= 'A') and (Name[Index] <= 'Z')) or
       ((Name[Index] >= '0') and (Name[Index] <= '9')) or
       (Pos(Name[Index], '\._ -') > 0)) then begin Result := False; Exit; end;
+end;
+
+procedure RequestTeamBarExit();
+#ifndef InstallerFixtureRoot
+var Request, Parameters, Executable, Helper, SystemDirectory: String; Attempt, Code, IsWow64: Integer; Receipt: AnsiString;
+#endif
+begin
+  Log('Requesting a normal shutdown of the installed Team Bar.');
+#ifdef InstallerFixtureRoot
+  SaveStringToFile('{#InstallerFixtureRoot}\exit-requested', 'yes', False);
+  if FileExists('{#InstallerFixtureRoot}\allow-exit') then
+    DeleteFile('{#InstallerFixtureRoot}\TeamBar.exe.running');
+#else
+  Executable := ExpandConstant('{app}\TeamBar.exe');
+  if not FileExists(Executable) then Exit;
+  RequireOrdinaryPath(Executable);
+  RequireOrdinaryPath(ExpandConstant('{app}\TeamBar.dll'));
+  Helper := ExpandConstant('{tmp}\Close-TeamBarForSetup.ps1');
+  if not FileExists(Helper) then ExtractTemporaryFile('Close-TeamBarForSetup.ps1');
+  CloseRequestNumber := CloseRequestNumber + 1;
+  Request := ExpandConstant('{tmp}\exit-request-') + IntToStr(CloseRequestNumber);
+  if not SaveStringToFile(Request, 'active', False) then Exit;
+  try
+    Parameters := '-NoLogo -NoProfile -NonInteractive -STA -ExecutionPolicy Bypass -File "' + Helper +
+      '" -ApplicationPath "' + Executable + '" -RequestFile "' + Request + '"';
+    if not IsWow64Process(GetCurrentProcess(), IsWow64) then Exit;
+    if IsWow64 <> 0 then SystemDirectory := ExpandConstant('{sysnative}') else SystemDirectory := ExpandConstant('{sys}');
+    if not Exec(SystemDirectory + '\WindowsPowerShell\v1.0\powershell.exe', Parameters,
+       ExpandConstant('{tmp}'), SW_HIDE, ewNoWait, Code) then Exit;
+    for Attempt := 1 to 125 do begin
+      if FileExists(Request + '.done') and LoadStringFromFile(Request + '.done', Receipt) then begin
+        Log('Team Bar shutdown response: ' + String(Receipt)); Break;
+      end;
+      Sleep(200);
+    end;
+  finally DeleteFile(Request); end;
+#endif
 end;
 
 function FileDiffers(Name, ExpectedHash: String): Boolean;
@@ -438,9 +486,6 @@ begin
         Result := 'Team Bar has not completed its safe shutdown. Nothing was installed; retry after it exits.'; Exit;
       end;
     end;
-    if ProcessRunning('TeamBar.exe') then begin
-      Result := 'Exit Team Bar from its tray menu, then try again. Your saved settings will be kept.'; Exit;
-    end;
     CheckInterruptedTransaction(InstallBackupBase);
 #ifndef InstallerFixtureRoot
     if RegKeyExists(HKCU, UninstallKey + StandardId + '_is1') and RegKeyExists(HKCU, UninstallKey + LegacyId + '_is1') then
@@ -464,6 +509,12 @@ begin
     finally PreviousPaths.Free; end;
     if NativeChange and ProcessRunning('eqgame.exe') then begin
       Result := 'This installation changes the native input libraries or their location. Close EverQuest, then try again. Setup will not close game clients for you.'; Exit;
+    end;
+    if ProcessRunning('TeamBar.exe') then begin
+      RequestTeamBarExit();
+      if ProcessRunning('TeamBar.exe') then begin
+        Result := 'Team Bar is still running. Choose Exit Team Bar in its tray menu, then retry Setup.'; Exit;
+      end;
     end;
     PrepareTransaction;
   except

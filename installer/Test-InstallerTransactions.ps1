@@ -8,7 +8,7 @@ if (Test-Path -LiteralPath $root) { throw 'Fixture output must be a new director
 New-Item -ItemType Directory -Path $root | Out-Null
 $results = [Collections.Generic.List[object]]::new()
 function Assert-Fixture([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
-foreach ($scenario in @('fixture-target-override-blocked', 'first-install', 'legacy-data-import', 'managed-update-game-open', 'bridge-change-game-open', 'host-change-game-open', 'crt-change-game-open', 'crt-removal-game-open', 'failed-health-rollback', 'interrupted-update-blocked')) {
+foreach ($scenario in @('fixture-target-override-blocked', 'first-install', 'legacy-data-import', 'managed-update-game-open', 'running-team-bar-exits', 'running-team-bar-refuses', 'bridge-change-game-open', 'host-change-game-open', 'crt-change-game-open', 'crt-removal-game-open', 'failed-health-rollback', 'interrupted-update-blocked')) {
     $case = Join-Path $root $scenario
     $payload = Join-Path $case 'payload'; $app = Join-Path $case 'app'; $data = Join-Path $case 'data'
     New-Item -ItemType Directory -Path $payload,$app,(Join-Path $data 'profiles') | Out-Null
@@ -48,6 +48,10 @@ foreach ($scenario in @('fixture-target-override-blocked', 'first-install', 'leg
         @('TeamBar.exe','TeamBridge.dll','TeamControllerHost.dll','vcruntime140.dll','retired-runtime.dll','installed-files.txt') | Set-Content -LiteralPath (Join-Path $app 'installed-files.txt') -Encoding ascii
     }
     if ($scenario -match 'game-open') { 'synthetic EQ process' | Set-Content -LiteralPath (Join-Path $case 'eqgame.exe.running') }
+    if ($scenario -match '^running-team-bar' -or $scenario -eq 'bridge-change-game-open') {
+        'synthetic Team Bar' | Set-Content -LiteralPath (Join-Path $case 'TeamBar.exe.running')
+    }
+    if ($scenario -eq 'running-team-bar-exits') { 'allow' | Set-Content -LiteralPath (Join-Path $case 'allow-exit') }
     if ($scenario -eq 'bridge-change-game-open') { 'old-native' | Set-Content -LiteralPath (Join-Path $app 'TeamBridge.dll') }
     if ($scenario -eq 'host-change-game-open') { 'old-native' | Set-Content -LiteralPath (Join-Path $app 'TeamControllerHost.dll') }
     if ($scenario -eq 'crt-change-game-open') { 'old-native' | Set-Content -LiteralPath (Join-Path $app 'vcruntime140.dll') }
@@ -75,8 +79,18 @@ foreach ($scenario in @('fixture-target-override-blocked', 'first-install', 'leg
     $process = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/DIR="' + $installTarget + '"'),('/LOG="' + (Join-Path $case 'setup.log') + '"')) -WindowStyle Hidden -PassThru
     if (-not $process.WaitForExit(30000)) { throw "Fixture installer did not finish within 30 seconds (not terminated): $scenario" }
     $process.Refresh()
-    $expectedSuccess = $scenario -in @('first-install', 'legacy-data-import', 'managed-update-game-open')
+    $expectedSuccess = $scenario -in @('first-install', 'legacy-data-import', 'managed-update-game-open', 'running-team-bar-exits')
     Assert-Fixture (($process.ExitCode -eq 0) -eq $expectedSuccess) "Unexpected installer exit code $($process.ExitCode): $scenario"
+    if ($scenario -match '^running-team-bar') {
+        Assert-Fixture (Test-Path -LiteralPath (Join-Path $case 'exit-requested')) 'Setup did not request a graceful exit.'
+        Assert-Fixture ((Test-Path -LiteralPath (Join-Path $case 'TeamBar.exe.running')) -ne $expectedSuccess) 'Running process guard was lost.'
+        if (-not $expectedSuccess) {
+            Assert-Fixture (-not (Test-Path -LiteralPath (Join-Path $case 'install-backups'))) 'Refused shutdown started a transaction.'
+        }
+    }
+    if ($scenario -eq 'bridge-change-game-open') {
+        Assert-Fixture (-not (Test-Path -LiteralPath (Join-Path $case 'exit-requested'))) 'An otherwise blocked install asked Team Bar to exit.'
+    }
     if ($scenario -eq 'fixture-target-override-blocked') {
         Assert-Fixture ((Get-Content -LiteralPath (Join-Path $case 'setup.log') -Raw).Contains('Fixture target must exactly match its compiled workspace app directory.')) 'Fixture target guard did not reject the override.'
         Assert-Fixture (-not (Test-Path -LiteralPath (Join-Path $case 'install-backups'))) 'Rejected fixture target created a backup transaction.'

@@ -120,9 +120,9 @@ internal sealed class ReleaseUpdateCoordinator
     }
 
     // Called only by the existing orderly Exit path after all settings have flushed and input has stopped.
-    internal async Task FinishExit(Func<Task> waitForNativeShutdown)
+    internal async Task FinishExit(Func<Task> waitForNativeShutdown, Func<bool> installerRequestedExit)
     {
-        try { await ReleaseUpdateHandoff.Finish(waitForNativeShutdown, ApplyQueued); }
+        try { await ReleaseUpdateHandoff.Finish(waitForNativeShutdown, () => ApplyQueued(installerRequestedExit)); }
         catch (Exception error)
         {
             if (queued is not null) { Status = "The update was not installed. " + error.Message; Changed?.Invoke(); }
@@ -130,12 +130,12 @@ internal sealed class ReleaseUpdateCoordinator
         }
     }
 
-    private void ApplyQueued()
+    private void ApplyQueued(Func<bool> installerRequestedExit)
     {
         if (queued is not { } update || client is null) return;
         ReleaseUpdateHandoff.Apply(() => EnsureGameClosedIfRequired(update.Manifest, client.Configuration),
             () => client.OpenVerifiedInstaller(update.Path, update.Manifest),
-            () => InstalledAppData.CreatePreUpdateBackup(update.Manifest.Version), () => StartInstaller(update.Path));
+            () => InstalledAppData.CreatePreUpdateBackup(update.Manifest.Version), () => StartInstaller(update.Path), installerRequestedExit);
         queued = null;
     }
 
@@ -176,12 +176,15 @@ internal static class ReleaseUpdateHandoff
         apply();
     }
 
-    internal static void Apply(Action ensureAllowed, Func<IDisposable> openVerifiedInstaller, Action backup, Action launch)
+    internal static void Apply(Action ensureAllowed, Func<IDisposable> openVerifiedInstaller, Action backup, Action launch,
+        Func<bool>? installerRequestedExit = null)
     {
+        if (installerRequestedExit?.Invoke() == true) return;
         ensureAllowed();
         using var verified = openVerifiedInstaller();
         backup();
+        if (installerRequestedExit?.Invoke() == true) return;
         ensureAllowed();
-        launch();
+        if (installerRequestedExit?.Invoke() != true) launch();
     }
 }

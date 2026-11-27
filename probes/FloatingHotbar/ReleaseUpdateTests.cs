@@ -172,6 +172,18 @@ internal static class ReleaseUpdateTests
         await RejectSync(() => ReleaseUpdateHandoff.Apply(() => throw new IOException("Fixture EQ still open."),
             () => throw new InvalidOperationException("Verification must not run."), () => { }, () => launched = true));
         Check(!launched, "A native update blocked by an open game never launches the installer.");
+        order.Clear();
+        ReleaseUpdateHandoff.Apply(() => order.Add("check"), () => new MemoryStream(), () => order.Add("backup"),
+            () => order.Add("launch"), () => true);
+        Check(order.Count == 0, "An external Setup waiting for exit supersedes a queued update before its game checks or backup.");
+        bool externalSetup = false;
+        ReleaseUpdateHandoff.Apply(() => order.Add("check"), () => new MemoryStream(), () => externalSetup = true,
+            () => order.Add("launch"), () => externalSetup);
+        Check(order.SequenceEqual(["check"]), "A Setup request received during backup prevents a competing installer launch.");
+        int eligibilityChecks = 0;
+        ReleaseUpdateHandoff.Apply(() => eligibilityChecks++, () => new MemoryStream(), () => { },
+            () => launched = true, () => eligibilityChecks == 2);
+        Check(eligibilityChecks == 2 && !launched, "A Setup request received during the last eligibility check also supersedes the queued update.");
         await GitHubReleaseNoticesTests.Run(Check);
         File.WriteAllText(Path.Combine(directory, "results.json"), JsonSerializer.Serialize(new { passed = true, checks = results.Count, results }, new JsonSerializerOptions { WriteIndented = true }));
     }
