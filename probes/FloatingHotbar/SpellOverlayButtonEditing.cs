@@ -1,10 +1,10 @@
 namespace TeamBar;
 
-internal enum OverlayButtonAction { Link, Create, EditSynced, MakeIndependent, Remove }
+internal enum OverlayButtonAction { Link, Create, EditSynced, Remove }
 
 internal sealed record OverlayButtonChange(OverlayButtonAction Action, SpellDockSide Side, string? GroupId = null,
-    SavedButton? Source = null, StandaloneButton? Draft = null, bool ExistingPlacement = false, int Column = 0,
-    string? PlacementId = null, bool NewColumn = false);
+    SavedButton? Source = null, StandaloneButton? Draft = null, int Column = 0,
+    string? PlacementId = null, bool NewColumn = false, int? Row = null);
 
 internal static class SpellOverlayButtonEditing
 {
@@ -13,8 +13,7 @@ internal static class SpellOverlayButtonEditing
     {
         var overlay = library.Overlays.SingleOrDefault(o => o.Id == overlayId)
             ?? throw new InvalidDataException("This spell bar no longer exists.");
-        bool createsDefinition = change.Action is OverlayButtonAction.Create or OverlayButtonAction.MakeIndependent;
-        bool needsPlacement = change.Action is OverlayButtonAction.EditSynced or OverlayButtonAction.Remove || change.ExistingPlacement;
+        bool needsPlacement = change.Action is OverlayButtonAction.EditSynced or OverlayButtonAction.Remove;
         if (!Enum.IsDefined(change.Action) || !Enum.IsDefined(change.Side))
             throw new InvalidDataException("Choose a button action and an edge.");
         if (change.Action is not (OverlayButtonAction.Create or OverlayButtonAction.Remove) && change.Source is null)
@@ -22,24 +21,25 @@ internal static class SpellOverlayButtonEditing
         if (change.Action is OverlayButtonAction.Create or OverlayButtonAction.EditSynced && change.Draft is null)
             throw new InvalidDataException("Configure the button shortcuts.");
         var sourceId = change.Source?.Value.Id ?? change.PlacementId;
-        string buttonId = createsDefinition ? "button-" + Guid.NewGuid().ToString("N")
+        string buttonId = change.Action == OverlayButtonAction.Create ? "button-" + Guid.NewGuid().ToString("N")
             : sourceId ?? throw new InvalidDataException("Choose the button to change.");
-        var group = FindGroup(overlay, change, needsPlacement);
+        var group = FindGroup(overlay, change, needsPlacement).CompactColumns();
         if (change.NewColumn && (needsPlacement || change.GroupId is null || change.Column != group.Columns))
             throw new InvalidDataException("The column layout has changed. Reopen the picker to add a column.");
         if (change.NewColumn && group.Columns >= ButtonColumns.MaxColumns)
             throw new InvalidDataException($"A group supports up to {ButtonColumns.MaxColumns} columns.");
+        if (change.Row.HasValue && needsPlacement)
+            throw new InvalidDataException("Choose a button slot when adding a button.");
         if (needsPlacement && (sourceId is null || !group.ButtonIds.Contains(sourceId)))
             throw new InvalidDataException("This button is no longer in the selected group. Reopen the editor.");
         StandaloneButton? edited = change.Action switch
         {
             OverlayButtonAction.Create => change.Draft! with { Id = buttonId, Floating = false },
-            OverlayButtonAction.MakeIndependent => Edit(change.Source!.Value, change.Draft) with { Id = buttonId, Floating = false },
-            OverlayButtonAction.EditSynced => Edit(change.Source!.Value, change.Draft),
+            OverlayButtonAction.EditSynced => Edit(change.Source!.Value, change.Draft!),
             _ => null
         };
         if (edited is not null) StandaloneButtons.Validate(edited);
-        var next = UpdateLayout(library, overlay, group, change, buttonId, sourceId);
+        var next = UpdateLayout(library, overlay, group, change, buttonId);
         SpellOverlayStore.Validate(next);
 
         return SpellOverlayStore.WithEditLock<(SpellOverlayLibrary, byte[]?, string)>(overlayPath, expectedOverlayBytes, () =>
@@ -50,11 +50,12 @@ internal static class SpellOverlayButtonEditing
                 StandaloneButtons.Save(destination, edited!, change.Source!.Bytes);
                 return (library, expectedOverlayBytes, buttonId);
             }
-            // A link or a copy refers to the revision the user saw in the picker.
-            // Removing a placement works even when the definition has gone missing.
-            using var sourceGuard = change.Source is not null && change.Action is OverlayButtonAction.Link or OverlayButtonAction.MakeIndependent
-                ? LockSource(profile, change.Source) : null;
-            if (!createsDefinition) return (next, SpellOverlayStore.WriteLocked(overlayPath, next), buttonId);
+            if (change.Action != OverlayButtonAction.Create)
+            {
+                // Link the revision shown in the picker. A missing button can still be removed.
+                using var sourceGuard = change.Action == OverlayButtonAction.Link ? LockSource(profile, change.Source!) : null;
+                return (next, SpellOverlayStore.WriteLocked(overlayPath, next), buttonId);
+            }
             byte[] created = StandaloneButtons.Save(destination, edited!, null);
             try { return (next, SpellOverlayStore.WriteLocked(overlayPath, next), buttonId); }
             catch
@@ -80,7 +81,7 @@ internal static class SpellOverlayButtonEditing
 
     // Keep visibility, standalone floating behavior, follow settings, and extension
     // data owned by the original document when changing only its visible fields.
-    private static StandaloneButton Edit(StandaloneButton saved, StandaloneButton? draft) => draft is null ? saved : saved with
+    private static StandaloneButton Edit(StandaloneButton saved, StandaloneButton draft) => saved with
     {
         Label = draft.Label, Icon = draft.Icon, Rules = draft.Rules,
         Characters = draft.Characters, Personas = draft.Personas
@@ -98,25 +99,26 @@ internal static class SpellOverlayButtonEditing
     }
 
     private static SpellOverlayLibrary UpdateLayout(SpellOverlayLibrary library, SpellOverlayDefinition overlay, SpellDockGroup group,
-        OverlayButtonChange change, string buttonId, string? sourceId)
+        OverlayButtonChange change, string buttonId)
     {
         if (change.Action == OverlayButtonAction.EditSynced) return library;
         ButtonPlacement[] entries;
         if (change.Action == OverlayButtonAction.Remove)
-            entries = group.Layout.Where(e => e.ButtonId != sourceId).ToArray();
-        else if (change.Action == OverlayButtonAction.MakeIndependent && change.ExistingPlacement)
-            entries = group.Layout.Select(e => e.ButtonId == sourceId ? e with { ButtonId = buttonId } : e).ToArray();
+            entries = ButtonColumns.Remove(group.Layout, buttonId, keepRows: group.Columns > 1);
         else
         {
             if (group.ButtonIds.Contains(buttonId)) throw new InvalidDataException("This saved button is already in this group.");
             if (!change.NewColumn && (change.Column < 0 || change.Column >= group.Columns))
                 throw new InvalidDataException("This column is no longer available.");
-            entries = [.. group.Layout, new(buttonId, change.Column)];
+            if (change.Row is int row) group.RequireVacantRow(change.Column, row);
+            entries = ButtonColumns.Insert(group.Layout, new(buttonId, change.Column, change.Row), null);
         }
         // Materialize legacy rows with their original column count before widening the group.
         var replacement = group.WithLayout(entries);
         if (change.NewColumn)
             replacement = replacement with { Columns = group.Columns + 1, ColumnNames = ButtonColumns.Names(group.ColumnNames, group.Columns + 1) };
+        else if (change.Action == OverlayButtonAction.Remove)
+            replacement = replacement.CompactColumns();
         var groups = overlay.DockGroups ?? [];
         var updated = overlay with
         {

@@ -10,7 +10,7 @@ internal partial class OverlayButtonEditor
     private static void TestIconGallery(FloatingTheme theme, StandaloneButton source, Action<bool, string> check, string output)
     {
         StandaloneButton? saved = null;
-        var panel = (OverlayButtonEditor)CreateEditor(theme, source, false, 1, (draft, _) => saved = draft);
+        var panel = (OverlayButtonEditor)CreateEditor(theme, source, false, 1, draft => saved = draft);
         // Only the first item tile contains opaque pixels. The other slots exercise
         // the same unavailable-art path as an empty cell or missing spell sheet.
         string fixture = Directory.CreateTempSubdirectory("teambar-gallery-").FullName;

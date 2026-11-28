@@ -37,10 +37,16 @@ internal static class FloatingThemeTests
         {
             var look = new FloatingAppearance { HideHeaders = hide };
             bool header = FloatingPainter.ShowsHeader("Named bar", look);
-            Check(!FloatingPainter.ShowsHeader("", look) && FloatingPainter.LogicalSize(2, header) == new System.Drawing.Size(448, hide ? 60 : 80),
-                "Compact controls retain column widths and use 42-pixel actions.");
-            Check(FloatingPainter.ActionAt(2, new(2, 45), header) == -1 && FloatingPainter.ActionAt(2, new(220, 45), header) == -1, "Bar padding sends a tap.");
-            Check(FloatingPainter.ActionAt(2, new(250, 45), header) == 1 && FloatingPainter.ActionAt(2, new(40, 45), header) == 0, "Painted button and hit region disagree.");
+            var size = FloatingPainter.LogicalSize(2, header);
+            var firstAction = FloatingPainter.ActionBounds(0, header);
+            var action = FloatingPainter.ActionBounds(1, header);
+            Check(!FloatingPainter.ShowsHeader("", look) && firstAction.Left == 3 && firstAction.Top == (header ? 24 : 3) &&
+                size.Width - action.Right == 3 && size.Height - action.Bottom == 3 && action.Width == 206 && action.Height == 42 &&
+                action.Left - firstAction.Right == 18, "Floating buttons retain their size and gutter with three-pixel outer edges and room for the optional title.");
+            Check(FloatingPainter.ActionAt(2, new(2, 30), header) == -1 && FloatingPainter.ActionAt(2, new(220, 30), header) == -1 &&
+                FloatingPainter.ActionAt(2, new(size.Width - 2, 30), header) == -1, "Bar padding sends a tap.");
+            Check(FloatingPainter.ActionAt(2, new(250, 30), header) == 1 && FloatingPainter.ActionAt(2, new(40, firstAction.Top + 1), header) == 0,
+                "Painted button and hit region disagree.");
             Check(FloatingPainter.ActionAt(1, new(40, 12), header) == (hide ? 0 : -1), "Hidden header leaves a stale hit region.");
         }
         foreach (var preset in FloatingThemes.Presets)

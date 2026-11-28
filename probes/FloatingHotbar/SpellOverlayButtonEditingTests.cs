@@ -39,10 +39,11 @@ internal static class SpellOverlayButtonEditingTests
             check(false, reason);
         }
         var source = Read(original.Id);
-        Change(first.Id, new(OverlayButtonAction.Link, SpellDockSide.Left, leftGroup.Id, source, Column: 1));
+        Change(first.Id, new(OverlayButtonAction.Link, SpellDockSide.Left, leftGroup.Id, source));
         Change(other.Id, new(OverlayButtonAction.Link, SpellDockSide.Bottom, Source: source));
         var otherGroup = library.Overlays[1].DockGroups!.Single();
-        check(library.Version == 3 && library.Overlays[0].DockGroups![0].Layout.Single() == new ButtonPlacement(original.Id, 1)
+        check(library.Version == 3 && library.Overlays[0].DockGroups![0] is { Columns: 1 } firstGroup
+            && firstGroup.Layout.Single() == new ButtonPlacement(original.Id, 0)
             && otherGroup.ButtonIds.Single() == original.Id && StandaloneButtons.Load(profile).Length == 1,
             "A saved button can be linked on two bars, keeping its ID, column, and single definition.");
         Reject<InvalidDataException>(() => Change(first.Id, new(OverlayButtonAction.Link, SpellDockSide.Left, leftGroup.Id, source)),
@@ -62,26 +63,26 @@ internal static class SpellOverlayButtonEditingTests
             && shared.Value.Floating && shared.Value.FollowCharacterId == "cedar" && shared.Value.ShowFor.Single().PersonaId == "cedar-brd"
             && shared.Value.Extra!["futureSetting"].GetString() == "retained",
             "Clearing a synced button name keeps its icon, shortcuts and both placements. The library describes its icon and shortcut.");
-        Reject<IOException>(() => Change(first.Id, new(OverlayButtonAction.MakeIndependent, SpellDockSide.Left, leftGroup.Id,
-            source, renamed, ExistingPlacement: true)), "Making an independent copy rejects a concurrently edited source definition.");
+        Reject<IOException>(() => Change(other.Id, new(OverlayButtonAction.EditSynced, SpellDockSide.Bottom, otherGroup.Id,
+            source, renamed)), "A second placement cannot overwrite a newer edit using a stale revision.");
+        Reject<IOException>(() => Change(other.Id, new(OverlayButtonAction.Link, SpellDockSide.Right, Source: source)),
+            "The picker rejects a saved button that changed after it opened.");
 
-        string detached = Change(first.Id, new(OverlayButtonAction.MakeIndependent, SpellDockSide.Left, leftGroup.Id,
-            shared, shared.Value with { Icon = "melody" }, ExistingPlacement: true));
-        var copied = Read(detached);
+        // Older profiles can contain separate button IDs with the same label and icon.
+        var legacy = shared.Value with { Id = "button-legacy", Floating = false };
+        StandaloneButtons.Save(StandaloneButtons.PathFor(profile, legacy.Id), legacy, null);
+        Change(first.Id, new(OverlayButtonAction.Link, SpellDockSide.Left, leftGroup.Id, Read(legacy.Id)));
+        Change(first.Id, new(OverlayButtonAction.EditSynced, SpellDockSide.Left, leftGroup.Id, Read(legacy.Id),
+            legacy with { Rules = [new(new(CharacterId: "cedar"), "F2")] }));
+        check(Read(legacy.Id).Value.Rules.Single().Key == "F2" && File.ReadAllBytes(originalPath).SequenceEqual(shared.Bytes),
+            "A pre-existing same-name button keeps its own ID and mappings when edited.");
+        Change(first.Id, new(OverlayButtonAction.Remove, SpellDockSide.Left, leftGroup.Id, shared));
         var placed = SpellOverlayStore.Load(overlayPath).Library;
         var placedGroup = placed.Overlays[0].DockGroups!.Single();
-        check(detached != original.Id && placedGroup.Layout.Single() == new ButtonPlacement(detached, 1)
-            && placedGroup.Scale == leftGroup.Scale && placedGroup.ColumnNames!.SequenceEqual(leftGroup.ColumnNames!)
-            && placed.Overlays[1].DockGroups!.Single().ButtonIds.Single() == original.Id && File.ReadAllBytes(originalPath).SequenceEqual(shared.Bytes)
-            && copied.Value.Label == "" && copied.Value.Icon == "melody" && !copied.Value.Floating && copied.Value.Extra!["futureSetting"].GetString() == "retained",
-            "Detaching replaces just the selected placement on disk, retaining the group's layout and the shared source revision.");
-        Change(first.Id, new(OverlayButtonAction.EditSynced, SpellDockSide.Left, leftGroup.Id, copied,
-            copied.Value with { Rules = [new(new(CharacterId: "cedar"), "F2")] }));
-        check(Read(original.Id).Value.Rules.Single().Key == "Ctrl+Shift+Alt+Y" && Read(detached).Value.Rules.Single().Key == "F2",
-            "After detaching, changing a local recipient shortcut does not change any linked instance.");
-        Change(first.Id, new(OverlayButtonAction.Remove, SpellDockSide.Left, leftGroup.Id, Read(detached)));
-        check(StandaloneButtons.Load(profile).Length == 2 && library.Overlays[0].DockGroups![0].Layout.Length == 0,
-            "Removing a placement preserves its saved definition and the group's columns.");
+        check(StandaloneButtons.Load(profile).Length == 2 && placedGroup.Layout.Single() == new ButtonPlacement(legacy.Id, 0)
+            && placedGroup.Scale == leftGroup.Scale && placedGroup.ColumnNames!.SequenceEqual(["Utility"])
+            && placed.Overlays[1].DockGroups!.Single().ButtonIds.Single() == original.Id,
+            "Removing a placement preserves the shared definition, its other placement and its group's settings.");
         StandaloneButtons.Remove(originalPath, shared.Bytes);
         Change(other.Id, new(OverlayButtonAction.Remove, SpellDockSide.Bottom, otherGroup.Id, PlacementId: original.Id));
         check(library.Overlays[1].DockGroups!.Single().ButtonIds.Length == 0,
@@ -103,9 +104,9 @@ internal static class SpellOverlayButtonEditingTests
         var added = Read(created);
         check(added.Value.Label == "" && added.Value.Icon == "follow" && !added.Value.Floating && library.Overlays[0].DockGroups!.Single(g => g.Side == SpellDockSide.Top).ButtonIds.Single() == created,
             "Creating an unnamed button on an empty edge saves the icon and mappings and creates its first placement.");
-        string unlinked = Change(other.Id, new(OverlayButtonAction.MakeIndependent, SpellDockSide.Right, Source: added));
-        check(unlinked != added.Value.Id && library.Overlays[1].DockGroups!.Single(g => g.Side == SpellDockSide.Right).ButtonIds.Single() == unlinked
-            && Read(unlinked).Value.Icon == added.Value.Icon, "The picker can place an independent copy directly.");
+        string linked = Change(other.Id, new(OverlayButtonAction.Link, SpellDockSide.Right, Source: added));
+        check(linked == created && library.Overlays[1].DockGroups!.Single(g => g.Side == SpellDockSide.Right).ButtonIds.Single() == linked
+            && StandaloneButtons.Load(profile).Length == 2, "A newly created button can be reused without allocating another definition.");
         for (int i = StandaloneButtons.Load(profile).Length; i < 20; i++)
         {
             var filler = original with { Id = "fixture-" + i };
@@ -113,17 +114,21 @@ internal static class SpellOverlayButtonEditingTests
         }
         Change(other.Id, new(OverlayButtonAction.Link, SpellDockSide.Top, Source: added));
         string next = Change(other.Id, create);
-        string copy = Change(other.Id, new(OverlayButtonAction.MakeIndependent, SpellDockSide.Top, Source: added));
-        check(StandaloneButtons.Load(profile).Length == 22 && Read(next).Value.Id != Read(copy).Value.Id,
-            "Creating and copying buttons beyond twenty preserves the complete library without an account.");
-        TestColumnPlacements(check, profile, Path.Combine(root, "columns.json"), added, [detached, unlinked, "legacy-action"]);
+        check(StandaloneButtons.Load(profile).Length == 21 && Read(next).Value.Id != created,
+            "Creating a button beyond twenty saves a separate definition without an account.");
+        TestColumnPlacements(check, profile, Path.Combine(root, "columns.json"), added, [legacy.Id, next, "legacy-action"]);
     }
 
     private static void TestColumnPlacements(Action<bool, string> check, string profile, string path, SavedButton source, string[] legacyIds)
     {
         var group = new SpellDockGroup("actions", "Actions", SpellDockSide.Top, legacyIds, Columns: 2)
             { ColumnNames = ["Travel", "Combat"] };
-        var bar = new SpellOverlayDefinition("bar", "Fixture bar", "Cedar", [], PersonaClass: "Bard", DockGroups: [group]);
+        var sparse = new SpellDockGroup("sparse", "Sparse", SpellDockSide.Left, legacyIds, Scale: 1.2, Columns: 6,
+            Placements: [new(legacyIds[0], 4), new(legacyIds[1], 1), new(legacyIds[2], 3)])
+            { ColumnNames = ["Unused 1", "Travel", "Unused 3", "Combat", "Support", "Unused 6"] };
+        var dense = new SpellDockGroup("dense", "Dense", SpellDockSide.Bottom,
+            ["left-top", "right-top", "left-middle", source.Value.Id, "left-bottom", "right-bottom"], Columns: 2);
+        var bar = new SpellOverlayDefinition("bar", "Fixture bar", "Cedar", [], PersonaClass: "Bard", DockGroups: [group, sparse, dense]);
         var library = new SpellOverlayLibrary(3, [bar]);
         byte[]? bytes = SpellOverlayStore.Save(path, library, null);
         string Add(OverlayButtonChange change)
@@ -135,7 +140,8 @@ internal static class SpellOverlayButtonEditingTests
         var link = new OverlayButtonChange(OverlayButtonAction.Link, group.Side, group.Id, source, Column: 2, NewColumn: true);
         var create = new OverlayButtonChange(OverlayButtonAction.Create, group.Side, group.Id, Draft: source.Value);
         string linked = Add(link);
-        var grown = SpellOverlayStore.Load(path).Library.Overlays.Single().DockGroups!.Single();
+        SpellDockGroup ReadGroup(string id) => SpellOverlayStore.Load(path).Library.Overlays.Single().DockGroups!.Single(g => g.Id == id);
+        var grown = ReadGroup(group.Id);
         check(grown.Columns == 3 && grown.ColumnNames!.SequenceEqual(["Travel", "Combat", "Column 3"])
             && grown.Layout.SequenceEqual([.. group.Layout, new ButtonPlacement(linked, 2)]),
             "Adding a column and its first linked button preserves names and the order of legacy placements.");
@@ -147,11 +153,10 @@ internal static class SpellOverlayButtonEditingTests
 
         string inExisting = Add(create with { Column = 1 });
         string inNew = Add(create with { Column = 3, NewColumn = true });
-        string independent = Add(link with { Action = OverlayButtonAction.MakeIndependent, Column = 4 });
-        grown = SpellOverlayStore.Load(path).Library.Overlays.Single().DockGroups!.Single();
-        check(grown.Columns == 5 && grown.Layout.SequenceEqual([.. group.Layout, new(linked, 2), new(inExisting, 1),
-                new(inNew, 3), new(independent, 4)]) && independent != linked,
-            "Adding a row appends to the chosen column, and new or independent buttons each open one requested column.");
+        grown = ReadGroup(group.Id);
+        check(grown.Columns == 4 && grown.Layout.SequenceEqual([.. group.Layout, new(linked, 2), new(inExisting, 1),
+                new(inNew, 3)]) && inExisting != inNew && inNew != linked,
+            "Creating a button in an existing row or new column gives it a distinct ID in the requested location.");
         for (int column = grown.Columns; column < ButtonColumns.MaxColumns; column++)
             Add(create with { Column = column, NewColumn = true });
         count = StandaloneButtons.Load(profile).Length;
@@ -159,5 +164,28 @@ internal static class SpellOverlayButtonEditingTests
         catch (InvalidDataException) { }
         check(File.ReadAllBytes(path).SequenceEqual(bytes!) && StandaloneButtons.Load(profile).Length == count,
             "A full group rejects another column before writing the layout or the new saved button.");
+        try { Add(create with { Column = 0, Row = 1 }); throw new Exception("An occupied cell was offered as a vacant row."); }
+        catch (InvalidDataException) { }
+        check(File.ReadAllBytes(path).SequenceEqual(bytes!) && StandaloneButtons.Load(profile).Length == count,
+            "Opening a stale picker for an occupied row cannot displace its button or allocate an unused definition.");
+        Add(new(OverlayButtonAction.Link, sparse.Side, sparse.Id, source, Column: 3, NewColumn: true));
+        var compact = ReadGroup(sparse.Id);
+        check(compact.Columns == 4 && compact.ColumnNames!.SequenceEqual(["Travel", "Combat", "Support", "Column 4"])
+            && compact.Layout.SequenceEqual([new(legacyIds[0], 2), new(legacyIds[1], 0), new(legacyIds[2], 1), new(source.Value.Id, 3)]),
+            "Adding a column to an older sparse dock places it immediately after occupied columns and retains their names.");
+        Add(new(OverlayButtonAction.Remove, sparse.Side, sparse.Id, PlacementId: legacyIds[2]));
+        compact = ReadGroup(sparse.Id);
+        check(compact.Columns == 3 && compact.Scale == sparse.Scale && compact.ColumnNames!.Take(2).SequenceEqual(["Travel", "Support"])
+            && compact.PositionedLayout.ToHashSet().SetEquals([new(legacyIds[0], 1, 0), new(legacyIds[1], 0, 0), new(source.Value.Id, 2, 0)])
+            && StandaloneButtons.Load(profile).Length == count && ReadGroup(group.Id).Columns == ButtonColumns.MaxColumns,
+            "Removing the last button from a middle column closes the gap on disk and keeps the other group and saved buttons intact.");
+        Add(new(OverlayButtonAction.Remove, dense.Side, dense.Id, source));
+        var withGap = ReadGroup(dense.Id);
+        check(withGap.PositionedLayout.ToHashSet().SetEquals(dense.PositionedLayout.Where(p => p.ButtonId != source.Value.Id)) &&
+            withGap.PositionedLayout.Contains(new ButtonPlacement("right-bottom", 1, 2)),
+            "Removing the middle button of a full two-column dock keeps its third row aligned across both columns.");
+        Add(new(OverlayButtonAction.Link, dense.Side, dense.Id, source, Column: 1, Row: 1));
+        check(ReadGroup(dense.Id).PositionedLayout.ToHashSet().SetEquals(dense.PositionedLayout),
+            "The same saved button can fill the vacated middle cell and restore every original coordinate.");
     }
 }

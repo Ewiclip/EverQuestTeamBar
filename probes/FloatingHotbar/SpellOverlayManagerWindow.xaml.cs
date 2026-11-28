@@ -367,20 +367,32 @@ public partial class SpellOverlayManagerWindow : W.Window
             if (baseline.Locked && (change.Scale is not null || change.Position is not null || change.GroupScale is not null || change.FreePosition is not null))
                 throw new InvalidDataException("Unlock the overlay before moving or resizing it.");
             var updated = change.Apply(baseline);
-            var library = savedLibrary with { Overlays = savedLibrary.Overlays.Select(d => d.Id == updated.Id ? updated : d).ToArray() };
+            if (change.ButtonMove is not null && ReferenceEquals(updated, baseline)) return baseline;
+            int index = definitions.ToList().FindIndex(d => d.Id == updated.Id);
+            if (index < 0 && (change.GroupName is not null || change.ButtonMove is not null))
+                throw new InvalidDataException("This overlay was removed in Settings.");
+            // Check the draft before writing so a pending edit cannot be overwritten.
+            var draft = index < 0 ? null : change.Apply(definitions[index], validate: false);
+            var library = savedLibrary with { Version = change.ButtonMove is null ? savedLibrary.Version : 3,
+                Overlays = savedLibrary.Overlays.Select(d => d.Id == updated.Id ? updated : d).ToArray() };
             savedBytes = SpellOverlayStore.Save(path, library, savedBytes); savedLibrary = library;
             generation++; // Discard a reading that captured the previous placement before the gesture completed.
             applied = applied.Select(d => d.Id == updated.Id ? updated : d).ToArray();
-            int index = definitions.ToList().FindIndex(d => d.Id == updated.Id);
-            if (index >= 0)
+            if (draft is not null)
             {
-                // Merge only this gesture into the editor draft; never save pending names/spells/personas.
-                var draft = change.Apply(definitions[index], validate: false);
                 loading = true; definitions[index] = draft;
                 if (selected?.Id == draft.Id) { selected = draft; OverlayList.SelectedItem = draft; }
                 loading = false;
+                if (selected?.Id == draft.Id && (change.GroupName is not null || change.ButtonMove is not null))
+                {
+                    RefreshDockChoices(change.GroupId);
+                    if (change.ButtonMove is { } move && (dockSelection == move.SourceGroup.Id || dockSelection == move.TargetGroup.Id))
+                        FillDockOrder();
+                }
             }
-            Status(dirty ? "Layout saved · other editor changes are still unsaved" : "Layout saved · position, size and lock are remembered");
+            string saved = change.ButtonMove is not null ? "Button moved" :
+                change.GroupName is not null ? "Button group renamed" : "Layout saved · position, size and lock are remembered";
+            Status(dirty ? "Layout saved · other editor changes are still unsaved" : saved);
             return updated;
         }
         catch (Exception error) { Status("Layout not saved: " + error.Message, true); throw; }

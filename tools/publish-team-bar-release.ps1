@@ -48,6 +48,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Self-contained release publication failed; the
 $assetsFile = & $dotnet msbuild $project -nologo -p:Configuration=Release -p:RuntimeIdentifier=win-x64 -p:TeamBarReleaseBuild=true -getProperty:ProjectAssetsFile
 if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the package folders for the published runtime packs.' }
 & (Join-Path $repo 'installer/Copy-DotNetRuntimeNotices.ps1') -PayloadDirectory $payload -ProjectAssetsFile $assetsFile -SdkPackDirectory (Join-Path (Split-Path -Parent $dotnet) 'packs')
+Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $payload 'notices/TeamBar-LICENSE.txt')
 foreach ($name in @('TeamBridge.dll', 'TeamControllerHost.dll')) { Copy-Item -LiteralPath (Join-Path $native $name) -Destination $payload }
 # Bundle only imported redistributable dependencies, preserving the exact native pair.
 # Windows 10/11 provide the UCRT. Do not ship SDK debug runtimes or arbitrary system DLLs.

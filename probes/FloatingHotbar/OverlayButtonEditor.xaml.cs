@@ -60,25 +60,17 @@ internal partial class OverlayButtonEditor : W.Window
     }
 
     internal static W.Window CreatePicker(FloatingTheme theme, SavedButton[] saved, IEnumerable<string> placedIds,
-        Action<SavedButton, bool> add, Action create, string title = "Add a button")
+        Action<SavedButton> add, Action create, string title = "Add a button")
     {
         var window = new OverlayButtonEditor(theme, title, 318);
         var placed = placedIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var choices = saved.OrderBy(s => s.Value.ManagementName, StringComparer.CurrentCultureIgnoreCase)
             .Select(s => (Saved: s, Info: PickerButtonInfo.From(s.Value, placed.Contains(s.Value.Id)))).ToArray();
-        var searchGrid = new C.Grid();
+        var searchGrid = new C.Grid { Margin = new(0, 0, 0, 6) };
         var search = new C.TextBox(); NameControl(search, "Search saved buttons");
         var placeholder = new C.TextBlock { Text = "Search saved buttons…", Margin = new(10, 0, 0, 0), Opacity = .65,
             VerticalAlignment = W.VerticalAlignment.Center, IsHitTestVisible = false };
         searchGrid.Children.Add(search); searchGrid.Children.Add(placeholder); window.Body.Children.Add(searchGrid);
-        var mode = new C.Primitives.UniformGrid { Columns = 2, Margin = new(0, 8, 0, 8) };
-        bool independent = false;
-        var linked = window.Button("Keep synced");
-        var copy = window.Button("Independent copy");
-        linked.ToolTip = "Use the saved button and share future changes.";
-        copy.ToolTip = "Create a separate button with these shortcuts.";
-        linked.Margin = new(0, 0, 3, 0); copy.Margin = new(3, 0, 0, 0);
-        mode.Children.Add(linked); mode.Children.Add(copy); window.Body.Children.Add(mode);
         var list = new C.StackPanel();
         window.Body.Children.Add(Scroll(list, 250));
         void Filter()
@@ -87,28 +79,20 @@ internal partial class OverlayButtonEditor : W.Window
             placeholder.Visibility = search.Text.Length == 0 ? W.Visibility.Visible : W.Visibility.Hidden;
             foreach (var choice in choices.Where(c => c.Info.SearchText.Contains(search.Text.Trim(), StringComparison.CurrentCultureIgnoreCase)))
             {
-                var row = window.Button(choice.Info.Name, () => window.Commit(() => add(choice.Saved, independent)));
+                var row = window.Button(choice.Info.Name, () => window.Commit(() => add(choice.Saved)));
                 var content = new C.StackPanel { Orientation = C.Orientation.Horizontal };
                 content.Children.Add(window.SavedIcon(choice.Saved.Value.Icon, 23));
                 content.Children.Add(new C.TextBlock { Text = choice.Info.Name, VerticalAlignment = W.VerticalAlignment.Center });
                 row.Content = content; row.Padding = new(10, 6, 10, 6); row.Margin = new(0, 2, 0, 2);
                 row.HorizontalContentAlignment = W.HorizontalAlignment.Left;
-                row.IsEnabled = !choice.Info.Included || independent;
+                row.IsEnabled = !choice.Info.Included;
                 row.ToolTip = !row.IsEnabled ? "Already in this group" : string.Join("\n", choice.Info.Mappings);
                 list.Children.Add(row);
             }
             if (list.Children.Count == 0) list.Children.Add(new C.TextBlock { Text = choices.Length == 0 ? "No saved buttons yet." : "No matching buttons.", Margin = new(4, 6, 4, 8) });
         }
-        void SetMode(bool value)
-        {
-            independent = value;
-            linked.SetResourceReference(C.Control.BorderBrushProperty, value ? "Line" : "Accent");
-            copy.SetResourceReference(C.Control.BorderBrushProperty, value ? "Accent" : "Line");
-            Filter();
-        }
-        linked.Click += (_, _) => SetMode(false);
-        copy.Click += (_, _) => SetMode(true);
-        search.TextChanged += (_, _) => Filter(); SetMode(false);
+        search.TextChanged += (_, _) => Filter();
+        Filter();
         var createButton = window.Button("+  Create button…", () => window.Commit(create));
         createButton.Margin = new(0, 9, 0, 0); createButton.SetResourceReference(C.Control.BorderBrushProperty, "Accent");
         window.Body.Children.Add(createButton);
@@ -117,7 +101,7 @@ internal partial class OverlayButtonEditor : W.Window
     }
 
     internal static W.Window CreateEditor(FloatingTheme theme, StandaloneButton draft, bool creating, int placements,
-        Action<StandaloneButton, bool> save, Action? remove = null)
+        Action<StandaloneButton> save, Action? remove = null)
     {
         var window = new OverlayButtonEditor(theme, creating ? "Create button" : "Edit shortcuts", 464);
         window.BuildEditor(draft, creating, placements, save, remove);
@@ -131,7 +115,7 @@ internal partial class OverlayButtonEditor : W.Window
         return window;
     }
 
-    private void BuildEditor(StandaloneButton draft, bool creating, int placements, Action<StandaloneButton, bool> save, Action? remove)
+    private void BuildEditor(StandaloneButton draft, bool creating, int placements, Action<StandaloneButton> save, Action? remove)
     {
         var team = draft.AsTeam();
         var options = team.Characters.Select(c => new TargetSelector(CharacterId: c.Id))
@@ -152,22 +136,8 @@ internal partial class OverlayButtonEditor : W.Window
         void UpdateIcon() => iconButton.Content = SavedIcon(icon, 28, "◇");
         iconButton.Click += (_, _) => OpenIconBrowser(iconButton, icon, selected => { icon = selected; UpdateIcon(); });
         UpdateIcon(); info.Children.Add(iconButton); info.Children.Add(name); Body.Children.Add(info);
-        bool independent = false;
-        if (!creating)
-        {
-            var scope = new C.DockPanel { Margin = new(0, 9, 0, 0) };
-            var summary = new C.TextBlock { VerticalAlignment = W.VerticalAlignment.Center };
-            var change = Button("Make independent");
-            C.DockPanel.SetDock(change, C.Dock.Right); scope.Children.Add(change); scope.Children.Add(summary);
-            void UpdateScope()
-            {
-                summary.Text = independent ? "Independent copy" : placements > 1 ? $"Shared across {placements} placements" : "Used only here";
-                change.Content = independent ? "Keep synced" : "Make independent";
-                NameControl(change, (string)change.Content);
-            }
-            change.Click += (_, _) => { independent = !independent; UpdateScope(); };
-            UpdateScope(); Body.Children.Add(scope);
-        }
+        if (placements > 1)
+            Body.Children.Add(new C.TextBlock { Text = $"Shared across {placements} placements", Margin = new(0, 9, 0, 0) });
         Body.Children.Add(new C.TextBlock { Text = "Recipients", FontWeight = W.FontWeights.SemiBold, Margin = new(0, 11, 0, 3) });
         var list = new C.StackPanel();
         Body.Children.Add(Scroll(list, 240));
@@ -213,7 +183,7 @@ internal partial class OverlayButtonEditor : W.Window
             if (rules.Count == 0) throw new InvalidDataException("Add at least one recipient.");
             if (rules.Any(r => r.Chord.Length == 0)) throw new InvalidDataException("Record a shortcut for each recipient.");
             var edited = draft with { Label = name.Text.Trim(), Icon = icon, Rules = rules.Select(r => new ButtonRule(r.Target, r.Chord)).ToArray() };
-            StandaloneButtons.Validate(edited); save(edited, independent);
+            StandaloneButtons.Validate(edited); save(edited);
         }));
         done.MinWidth = 85; done.SetResourceReference(C.Control.BackgroundProperty, "Accent");
         done.SetResourceReference(C.Control.ForegroundProperty, "Surface"); done.FontWeight = W.FontWeights.SemiBold;

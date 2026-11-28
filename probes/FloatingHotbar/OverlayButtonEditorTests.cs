@@ -44,29 +44,33 @@ internal partial class OverlayButtonEditor
         void Click(OverlayButtonEditor panel, string name) =>
             Find<C.Button>(panel, name).RaiseEvent(new W.RoutedEventArgs(C.Primitives.ButtonBase.ClickEvent));
 
-        SavedButton? picked = null; bool independent = false;
-        var picker = (OverlayButtonEditor)CreatePicker(theme, saved, ["assist"], (b, i) => { picked = b; independent = i; }, () => { });
+        SavedButton? picked = null;
+        var picker = (OverlayButtonEditor)CreatePicker(theme, saved, ["assist"], b => picked = b, () => { });
         try
         {
-            check(!Find<C.Button>(picker, "Assist & Attack").IsEnabled, "Overlay picker blocks a duplicate synced placement in the same dock group.");
+            check(!Find<C.Button>(picker, "Assist & Attack").IsEnabled
+                && !Descendants(picker.PanelRoot).OfType<C.Button>().Any(b => W.Automation.AutomationProperties.GetName(b) is "Keep synced" or "Independent copy"),
+                "The picker offers saved buttons directly and disables a button already in this group.");
             GroupEditorTests.Screenshot(picker.PanelRoot, output + ".button-picker.png");
-            Click(picker, "Independent copy");
-            Find<C.TextBox>(picker, "Search saved buttons").Text = "attack";
-            check(Find<C.Button>(picker, "Assist & Attack").IsEnabled
-                && !Descendants(picker.PanelRoot).OfType<C.Button>().Any(b => W.Automation.AutomationProperties.GetName(b) == "Follow Oak"),
-                "Typing in the overlay picker filters saved buttons, and an independent copy is allowed in the same group.");
-            Click(picker, "Assist & Attack");
-            check(picked == saved[0] && independent, "Adding a copy passes the original saved button and independent mode to placement storage.");
+            Find<C.TextBox>(picker, "Search saved buttons").Text = "follow";
+            check(Find<C.Button>(picker, "Follow Oak").IsEnabled
+                && !Descendants(picker.PanelRoot).OfType<C.Button>().Any(b => W.Automation.AutomationProperties.GetName(b) == "Assist & Attack"),
+                "Typing in the overlay picker filters saved buttons.");
+            Click(picker, "Follow Oak");
+            check(picked == saved[1], "Selecting a saved button passes its original definition directly to placement storage.");
         }
         finally { picker.Close(); }
 
         StandaloneButton? result = null;
-        var editor = (OverlayButtonEditor)CreateEditor(theme, value, false, 2, (b, i) => { result = b; independent = i; });
+        var editor = (OverlayButtonEditor)CreateEditor(theme, value, false, 2, b => result = b);
         editor.currentArtwork = () => new EqIconArtwork(Path.GetFullPath(output) + ".no-eq-install");
         editor.readIconCatalog = _ => EqIconCatalog.FromNames([], []);
         try
         {
             Layout(editor);
+            check(Descendants(editor.PanelRoot).OfType<C.TextBlock>().Any(t => t.Text == "Shared across 2 placements")
+                && !Descendants(editor.PanelRoot).OfType<C.Button>().Any(b => W.Automation.AutomationProperties.GetName(b) is "Make independent" or "Keep synced"),
+                "The editor shows how many placements share a button without a switch to detach it.");
             GroupEditorTests.Screenshot(editor.PanelRoot, output + ".button-shortcuts.png");
             Click(editor, "Record shortcut · Alt+3");
             var modifiers = I.ModifierKeys.Control | I.ModifierKeys.Shift | I.ModifierKeys.Alt;
@@ -80,11 +84,11 @@ internal partial class OverlayButtonEditor
             check(!editor.ConsumeKey(0x100, 0x59, scanY, I.ModifierKeys.None), "Ordinary typing remains available outside shortcut recording.");
             Click(editor, "Choose button icon"); Click(editor, "Symbols"); Click(editor, "Melody");
             Find<C.TextBox>(editor, "Button name").Text = " ";
-            Click(editor, "Make independent"); Click(editor, "Done");
-            check(independent && result?.Rules[1].Key == "Ctrl+Shift+Alt+Y" && result.Rules[0] == value.Rules[0]
+            Click(editor, "Done");
+            check(result?.Rules[1].Key == "Ctrl+Shift+Alt+Y" && result.Id == value.Id && result.Rules[0] == value.Rules[0]
                 && result.Rules[1].Target == value.Rules[1].Target && result.Icon == "melody" && result.Label == "" && result.ShowFor == value.ShowFor
                 && result.FollowCharacterId == value.FollowCharacterId && !result.Floating && value.Rules[1].Key == "Alt+3",
-                "An independent icon-only edit saves the selected shortcut and blank label while preserving the original, ordering, visibility and anchor.");
+                "An icon-only edit keeps the saved button ID, other recipients, visibility and anchor.");
             foreach (string key in InputKeys.Names)
             {
                 var row = new EditRow(new(new(Class: "Shaman"), "")) { Record = new() };
@@ -101,7 +105,7 @@ internal partial class OverlayButtonEditor
         finally { editor.Close(); }
         int saves = 0;
         var creating = (OverlayButtonEditor)CreateEditor(theme, value with { Label = "", Rules = [new(new(CharacterId: "oak"), "")] },
-            true, 0, (_, _) => saves++);
+            true, 0, _ => saves++);
         try
         {
             Click(creating, "Add to bar"); Find<C.TextBox>(creating, "Button name").Text = "Test";
@@ -113,7 +117,7 @@ internal partial class OverlayButtonEditor
         // Exercise the real HWND-scoped WPF filter with messages raised only in
         // this fixture dispatcher. These messages never enter the OS input queue.
         StandaloneButton? recorded = null;
-        var shown = (OverlayButtonEditor)CreateEditor(theme, value, false, 1, (b, _) => recorded = b);
+        var shown = (OverlayButtonEditor)CreateEditor(theme, value, false, 1, b => recorded = b);
         var other = new W.Window { ShowInTaskbar = false };
         try
         {

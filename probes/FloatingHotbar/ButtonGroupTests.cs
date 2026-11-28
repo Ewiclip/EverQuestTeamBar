@@ -78,8 +78,13 @@ internal sealed partial class FloatingWorkspace
         check(group.Taps.SelectMany(t => t).Any(t => t.Key == "Ctrl+Shift+H" && t.Modifiers == 3),
             "Grouped references retain two held modifiers and a tapped key.");
         var cells = GroupCells(group);
-        check(cells[0].X != cells[1].X && ActionAt(group, new(cells[1].X + 10, cells[1].Y + 10)) == 1,
-            "Group hit testing uses the same explicit column geometry as drawing.");
+        check(cells[0].Left == 3 && GroupCanvas(group).Width - cells[1].Right == 3 &&
+            cells[0].Right + 18 == cells[1].Left && ActionAt(group, new(cells[1].X + 10, cells[1].Y + 1)) == 1,
+            "The outermost columns sit three pixels from the shell, and the first pixels of the button still receive clicks.");
+        var stacked = new Surface(group.Path, group.Heading, [], []) { Group = group.Group, Members = [.. group.Members, new("utility", 0)] };
+        var bottomCell = GroupCells(stacked)[^1];
+        check(GroupCanvas(stacked).Height - bottomCell.Bottom == 3 && ActionAt(stacked, new(bottomCell.X + 10, bottomCell.Bottom + 1)) == -1,
+            "A multirow hotkey group ends three pixels below its last button and its bottom padding does not receive clicks.");
         var snapshot = RecoverySnapshot();
         var emptyGroup = group.Group! with { Buttons = [] };
         var emptySetup = snapshot.Setup with { Team = snapshot.Setup.Team with { Groups = [emptyGroup] } };

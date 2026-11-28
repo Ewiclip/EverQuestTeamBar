@@ -2,16 +2,26 @@ namespace TeamBar;
 
 internal sealed record SpellOverlayLayoutChange(bool? Locked = null, double? Scale = null,
     GameFrame? Frame = null, RelativePosition? Position = null, string? GroupId = null, double? GroupScale = null,
-    OverlayDesktopPosition? FreePosition = null)
+    OverlayDesktopPosition? FreePosition = null, string? GroupName = null, string? ExpectedGroupName = null, DockButtonMove? ButtonMove = null)
 {
     internal SpellOverlayDefinition Apply(SpellOverlayDefinition definition, bool validate = true)
     {
-        var next = definition with { Locked = Locked ?? definition.Locked, Scale = Scale ?? definition.Scale,
-            FreePosition = FreePosition ?? definition.FreePosition };
-        if (GroupScale is { } groupScale)
+        var next = ButtonMove?.Apply(definition) ?? definition;
+        if (Locked is not null || Scale is not null || FreePosition is not null)
+            next = next with { Locked = Locked ?? next.Locked, Scale = Scale ?? next.Scale, FreePosition = FreePosition ?? next.FreePosition };
+        if (GroupScale is not null || GroupName is not null)
         {
-            if (GroupId is null || definition.DockGroups?.Any(g => g.Id == GroupId) != true) throw new InvalidDataException("This button group changed. Reopen its settings.");
-            next = next with { DockGroups = definition.DockGroups.Select(g => g.Id == GroupId ? g with { Scale = groupScale } : g).ToArray() };
+            var groups = next.DockGroups ?? [];
+            var group = groups.SingleOrDefault(g => g.Id == GroupId)
+                ?? throw new InvalidDataException("This button group changed. Reopen its settings.");
+            var updated = group with { Scale = GroupScale ?? group.Scale };
+            if (GroupName is { } name)
+            {
+                if (group.Name != ExpectedGroupName || group.ButtonIds.Length == 0)
+                    throw new InvalidDataException("This button group changed. Reopen its title to rename it.");
+                updated = updated with { Name = string.IsNullOrWhiteSpace(name) ? "" : name };
+            }
+            next = next with { DockGroups = groups.Select(g => g.Id == GroupId ? updated : g).ToArray() };
         }
         if (Position is { } position)
         {

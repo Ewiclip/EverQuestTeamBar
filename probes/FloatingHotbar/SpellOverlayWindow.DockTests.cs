@@ -22,9 +22,30 @@ internal sealed partial class SpellOverlayWindow
             async Task Settle() => await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ContextIdle);
             Draw(); await Settle();
             W.Rect Bounds(W.FrameworkElement element) => element.TransformToAncestor(display).TransformBounds(new(0, 0, element.ActualWidth, element.ActualHeight));
+            static W.Rect InPanel(C.Border panel, W.FrameworkElement element) =>
+                element.TransformToAncestor(panel).TransformBounds(new(0, 0, element.ActualWidth, element.ActualHeight));
+            static bool Three(double gap) => Math.Abs(gap - 3) < 1; // Layout rounding varies with monitor DPI.
+            static double BottomGap(C.Border panel, W.FrameworkElement child) =>
+                panel.ActualHeight - panel.BorderThickness.Bottom - child.TranslatePoint(new(0, child.ActualHeight), panel).Y;
+            bool HasCompactFooter(string groupId) => Math.Abs(display.dockRows.Where(r => r.Group == groupId)
+                .Min(r => BottomGap(display.dockPanels[groupId].Panel, r.Border)) - 3) < 1;
             var initialBody = Bounds(display.shell); var initialRight = Bounds(display.dockPanels["emergency"].Panel);
             check(display.dockRows.Count == 4 && Bounds(display.dockPanels["support"].Panel).Top >= initialBody.Bottom
                 && initialRight.Left >= initialBody.Right, "docked groups are laid out below and beside the spell body in one native click surface");
+            check(display.dockPanels.All(pair => HasCompactFooter(pair.Key) && pair.Value.Grip.IsVisible &&
+                display.dockRows.Where(r => r.Group == pair.Key).All(r => Bounds(pair.Value.Grip).Bottom <= Bounds(r.Border).Top)),
+                "Unlocked dock sections leave three DIPs below the last button and keep their resize handles above all buttons.");
+            foreach (var group in definition.DockGroups!)
+            {
+                var dockPanel = display.dockPanels[group.Id].Panel;
+                var faces = display.dockRows.Where(r => r.Group == group.Id).Select(r => InPanel(dockPanel, r.Border)).ToArray();
+                var title = SpellOverlayManagerWindow.OverlayTestControls(dockPanel).OfType<C.TextBlock>().Single(t => t.Text == group.Name);
+                check(Three(faces.Min(r => r.Left) - dockPanel.BorderThickness.Left) &&
+                    Three(dockPanel.ActualWidth - dockPanel.BorderThickness.Right - faces.Max(r => r.Right)) &&
+                    Three(InPanel(dockPanel, title).Top - dockPanel.BorderThickness.Top) &&
+                    faces.All(r => r.Width >= 103 && r.Height >= 41),
+                    $"The {group.Name} dock has three-DIP side and top insets and retains full-size buttons.");
+            }
             var hidden = buttons.Select(b => b.Value.Id == "invis" ? b with { Value = b.Value with { ShowFor = [new(Class: "Cleric")] } } : b).ToArray();
             display.SetDockButtons(hidden, clients); Draw();
             check(display.dockRows.All(r => r.Button.Id != "invis")
@@ -48,6 +69,15 @@ internal sealed partial class SpellOverlayWindow
                     SpellDockSide.Top => group.Bottom <= body.Top + 1, _ => group.Top >= body.Bottom - 1 }, "group docks on the requested edge: " + side);
             }
             display.ToggleLayoutLock(true); Draw();
+            check(display.dockPanels.All(pair => HasCompactFooter(pair.Key) && !pair.Value.Grip.IsVisible)
+                && !display.BeginLayoutEdit(false, new(100, 100), "support"),
+                "Locked dock sections keep the three-DIP bottom inset and disable their resize handles.");
+            var named = definition.DockGroups!.Single();
+            definition = definition with { DockGroups = [named with { Name = "" }] }; Draw();
+            var untitledPanel = display.dockPanels[named.Id].Panel;
+            check(Three(display.dockRows.Min(r => InPanel(untitledPanel, r.Border).Top) - untitledPanel.BorderThickness.Top),
+                "A locked dock with a blank title leaves three DIPs above its first row.");
+            definition = definition with { DockGroups = [named] }; Draw();
             var gear = ((C.Primitives.UniformGrid)display.LayoutLock!.Content).Children.OfType<C.Button>().First();
             gear.RaiseEvent(new W.RoutedEventArgs(C.Button.ClickEvent));
             check(opened == definition.Id && saves == 2, "settings gear opens its own bar without altering the lock or saved layout");
@@ -77,11 +107,11 @@ internal sealed partial class SpellOverlayWindow
             display.RoutedSpellMouse(0x201, screen); display.SetDockButtons([], clients); Draw(); display.RoutedSpellMouse(0x202, screen);
             check(requests.Count == 1 && display.dockRows.All(r => !r.Button.Available), "removing a saved button cancels a held click and disables its placeholder");
 
-            var editorRequests = new List<(SpellDockSide Side, string? Group, string? Id, int Column, bool AddColumn)>();
+            var editorRequests = new List<(SpellDockSide Side, string? Group, string? Id, int Column, bool AddColumn, int? Row)>();
             W.Window? panel = null;
-            display.OpenButtonEditor = (owner, anchor, edge, group, id, column, addColumn) =>
+            display.OpenButtonEditor = (owner, anchor, edge, group, id, column, addColumn, targetRow) =>
             {
-                editorRequests.Add((edge, group, id, column, addColumn));
+                editorRequests.Add((edge, group, id, column, addColumn, targetRow));
                 panel = new W.Window { Width = 230, Height = 100, WindowStyle = W.WindowStyle.None, ShowInTaskbar = false };
                 owner.ShowButtonEditor(panel, anchor, edge);
             };
@@ -108,18 +138,33 @@ internal sealed partial class SpellOverlayWindow
             check(Edges().All(edge => display.dockPanels.Values.All(group => !Bounds(edge).IntersectsWith(Bounds(group.Panel)))),
                 "each empty-direction rail stays clear of populated groups");
             var groupControls = InGroup(support.Id);
+            var groupBounds = Bounds(display.dockPanels[support.Id].Panel);
+            var groupRows = display.dockRows.Where(r => r.Group == support.Id).ToArray();
             for (int column = 0; column < support.Columns; column++)
             {
                 var addRow = groupControls.Single(b => Name(b) == $"Add a row to {support.Name}, column {column + 1}");
-                var rows = display.dockRows.Where(r => r.Group == support.Id && C.Grid.GetColumn(r.Border) == column).ToArray();
-                check(Bounds(display.dockPanels[support.Id].Panel).Contains(Bounds(addRow))
-                    && rows.All(r => Bounds(addRow).Top + 1 >= Bounds(r.Border).Bottom),
-                    $"the row picker for column {column + 1} sits below its own buttons inside the group");
+                var rowPickerBounds = Bounds(addRow);
+                check(Math.Abs(BottomGap(display.dockPanels[support.Id].Panel, addRow) - 3) < 1,
+                    $"The edit control below column {column + 1} ends three DIPs inside the group border.");
+                var rows = groupRows.Where(r => C.Grid.GetColumn(r.Border) == column).Select(r => Bounds(r.Border)).ToArray();
+                check(Equals(addRow.Content, "+") && Equals(addRow.ToolTip, Name(addRow)) && groupBounds.Contains(rowPickerBounds)
+                    && rows.All(r => rowPickerBounds.Top + 1 >= r.Bottom
+                        && Math.Abs((rowPickerBounds.Left + rowPickerBounds.Right - r.Left - r.Right) / 2) <= 1),
+                    $"the row + is centered below column {column + 1} and identifies its action on hover");
             }
             var addColumnButton = groupControls.Single(b => Name(b) == $"Add a column to {support.Name}");
-            check(Bounds(display.dockPanels[support.Id].Panel).Contains(Bounds(addColumnButton))
-                && display.dockRows.All(r => !Bounds(addColumnButton).IntersectsWith(Bounds(r.Border))),
-                "the new-column control belongs to its group and leaves its current buttons unobstructed");
+            var editPanel = display.dockPanels[support.Id].Panel;
+            var editTitle = SpellOverlayManagerWindow.OverlayTestControls(editPanel).OfType<C.TextBox>().Single();
+            check(Three(InPanel(editPanel, editTitle).Top - editPanel.BorderThickness.Top) &&
+                Three(InPanel(editPanel, editTitle).Left - editPanel.BorderThickness.Left) &&
+                Three(editPanel.ActualWidth - editPanel.BorderThickness.Right - InPanel(editPanel, addColumnButton).Right),
+                "The editable group name and right-hand add control follow the three-DIP inset.");
+            var columnPickerBounds = Bounds(addColumnButton);
+            var rightmostButton = Bounds(groupRows.First(r => C.Grid.GetColumn(r.Border) == support.Columns - 1).Border);
+            check(Equals(addColumnButton.Content, "+") && Equals(addColumnButton.ToolTip, Name(addColumnButton))
+                && groupBounds.Contains(columnPickerBounds) && columnPickerBounds.Left + 1 >= rightmostButton.Right
+                && columnPickerBounds.Bottom > rightmostButton.Top && columnPickerBounds.Top < rightmostButton.Bottom,
+                "the column + sits to the right of the last button, alongside the button row, and identifies its action on hover");
 
             definition = definition with { DockGroups = [support, new("empty-side", "Empty side", SpellDockSide.Left, []),
                 new("empty-sibling", "Empty sibling", support.Side, []), new("missing", "Missing", SpellDockSide.Right, ["missing-id"])] };
@@ -128,12 +173,51 @@ internal sealed partial class SpellOverlayWindow
                 && !display.dockPanels.ContainsKey("empty-sibling")
                 && display.dockRows.Any(r => r.Group == "missing") && Edges().All(b => Name(b) != "Add a button on the right"),
                 "empty groups disappear on both occupied and empty sides, with one add rail per empty side and missing references available to repair");
-            definition = definition with { DockGroups = [support with { Columns = 6 }] };
+            var oneColumn = (support with { Columns = 6 }).WithLayout([new("invis", 4), new("assist", 4), new("heal", 4)]);
+            definition = definition with { DockGroups = [oneColumn] };
+            Draw(); await Settle();
+            var singleRowPlus = InGroup(support.Id).Single(b => Name(b).StartsWith("Add a row to ", StringComparison.Ordinal));
+            var columnPluses = InGroup(support.Id).Where(b => Name(b).StartsWith($"Add a column to {support.Name}", StringComparison.Ordinal)).ToArray();
+            check(C.Grid.GetColumn(singleRowPlus) == 0 && C.Grid.GetRow(singleRowPlus) == 3 &&
+                columnPluses.All(b => C.Grid.GetColumn(b) == 1 && C.Grid.GetRowSpan(b) == 1) &&
+                columnPluses.Select(C.Grid.GetRow).Order().SequenceEqual([0, 1, 2])
+                && display.dockRows.All(row => C.Grid.GetColumn(row.Border) == 0),
+                "three stacked buttons have one append control below them and one new-column target beside each button");
+            var staggered = support.WithLayout([new("invis", 0, 0), new("assist", 1, 2)]);
+            definition = definition with { DockGroups = [staggered] };
+            Draw(); await Settle();
+            display.ToggleButtonEditing(); Draw(); await Settle();
+            var upper = display.dockRows.Single(r => r.Button.Id == "invis").Border;
+            var lower = display.dockRows.Single(r => r.Button.Id == "assist").Border;
+            var playGrid = (C.Grid)lower.Parent;
+            check(C.Grid.GetRow(lower) == 2 && playGrid.RowDefinitions[1].ActualHeight >= 42 &&
+                Bounds(lower).Top > Bounds(upper).Bottom && !playGrid.Children.OfType<C.Button>().Any(),
+                "The normal overlay preserves a completely empty row between staggered buttons and hides its edit targets.");
+            var nearlyFull = support.WithLayout([new("invis", 0, 0), new("assist", 1, 0), new("heal", 0, 1)]);
+            var filled = nearlyFull.WithLayout(ButtonColumns.Insert(nearlyFull.Layout, new("cure", 1, 1), null));
+            definition = definition with { DockGroups = [filled] };
+            display.SetDockButtons(hidden, clients); Draw(); await Settle();
+            check(display.dockRows.All(r => r.Button.Id != "invis") &&
+                C.Grid.GetRow(display.dockRows.Single(r => r.Button.Id == "heal").Border) == 1 &&
+                C.Grid.GetRow(display.dockRows.Single(r => r.Button.Id == "cure").Border) == 1,
+                "Filling the last empty cell keeps both lower buttons aligned when a conditional button above them disappears.");
+            display.SetDockButtons(buttons, clients);
+            display.ToggleButtonEditing();
+            var sparse = (support with { Columns = 6 }).WithLayout([new("invis", 1), new("assist", 4)]);
+            definition = definition with { DockGroups = [sparse] };
+            Draw(); await Settle();
+            check(InGroup(support.Id).Count(b => Name(b).StartsWith("Add a row to ", StringComparison.Ordinal)) == 2
+                && InGroup(support.Id).Count(b => Name(b) == $"Add a column to {support.Name}" && b.IsEnabled) == 1
+                && display.dockRows.Select(r => C.Grid.GetColumn(r.Border)).SequenceEqual([0, 1])
+                && Math.Abs(Bounds(display.dockPanels[support.Id].Panel).Width - groupBounds.Width) < 1,
+                "leading, middle and trailing empty columns use no overlay space or row controls");
+            var full = support with { Columns = 6, ButtonIds = ["invis", "assist", "heal", "cure", "travel", "rally"] };
+            definition = definition with { DockGroups = [full] };
             Draw(); await Settle();
             check(InGroup(support.Id).Count(b => Name(b).StartsWith("Add a row to ", StringComparison.Ordinal)) == 6
-                && InGroup(support.Id).All(b => Name(b) != $"Add a column to {support.Name}" || !b.IsEnabled),
-                "the six-column limit keeps every row picker available and prevents another column");
-            definition = definition with { DockGroups = [support] };
+                && InGroup(support.Id).All(b => Name(b) != $"Add a column to {support.Name}"),
+                "six occupied columns keep all six row pickers and omit the add-column control");
+            definition = definition with { DockGroups = [sparse] };
             Draw(); await Settle();
             if (buttonPreviewPath is not null)
             {
@@ -144,25 +228,45 @@ internal sealed partial class SpellOverlayWindow
                 display.SetDockButtons(buttons.Select(b => b with { Value = b.Value with { Icon = "swords" } }).ToArray(), clients);
                 display.Render(preview, new("a gnoll thug", "", [])); display.Place(preview, frame);
                 await Settle();
-                var png = new W.Media.Imaging.PngBitmapEncoder();
-                png.Frames.Add(W.Media.Imaging.BitmapFrame.Create(SpellOverlayManagerWindow.OverlayBitmap(display)));
-                using (var file = new FileStream(buttonPreviewPath, FileMode.CreateNew)) png.Save(file);
+                void SavePreview(string path)
+                {
+                    var png = new W.Media.Imaging.PngBitmapEncoder();
+                    png.Frames.Add(W.Media.Imaging.BitmapFrame.Create(SpellOverlayManagerWindow.OverlayBitmap(display)));
+                    using var file = new FileStream(path, FileMode.CreateNew); png.Save(file);
+                }
+                SavePreview(buttonPreviewPath);
+                var face = (C.Button)display.dockRows.Single(r => r.Group == "combat" && r.Button.Id == "cure").Border.Child;
+                var origin = face.TranslatePoint(new W.Point(face.ActualWidth / 2, face.ActualHeight / 2), display);
+                display.BeginDockButtonPress(face, preview.DockGroups![0], "cure", origin);
+                display.UpdateDockButtonDrag(origin + new W.Vector(W.SystemParameters.MinimumHorizontalDragDistance + 1, 0));
+                display.UpdateLayout();
+                var slot = SpellOverlayManagerWindow.OverlayTestControls(display).OfType<W.Shapes.Rectangle>()
+                    .Single(r => r.Tag is DockButtonMove { TargetGroup.Id: "combat", Column: 0, BeforeButtonId: "heal" });
+                var rightSlot = display.dockDropSlots.Single(r => r.Tag is DockButtonMove { TargetGroup.Id: "combat", NewColumn: true, Row: 0 });
+                var dragPanel = display.dockPanels["combat"].Panel;
+                check(Three(InPanel(dragPanel, slot).Left - dragPanel.BorderThickness.Left) &&
+                    Three(dragPanel.ActualWidth - dragPanel.BorderThickness.Right - InPanel(dragPanel, rightSlot).Right),
+                    "The left and right dotted drop targets retain the compact inset while dragging.");
+                var target = slot.TranslatePoint(new W.Point(slot.ActualWidth * .8, slot.ActualHeight / 2), display);
+                display.UpdateDockButtonDrag(target); display.UpdateLayout();
+                SavePreview(Path.ChangeExtension(buttonPreviewPath, "drag.png"));
+                display.EndDockButtonDrag();
                 display.SetDockButtons(buttons, clients); Draw();
                 await Settle();
             }
             var add = Edges().Single(b => Name(b) == "Add a button on the left");
             add.RaiseEvent(new W.RoutedEventArgs(C.Button.ClickEvent));
-            check(editorRequests.Single() == (SpellDockSide.Left, (string?)null, (string?)null, 0, false) && panel is { IsVisible: true } && panel.Owner == display,
+            check(editorRequests.Single() == (SpellDockSide.Left, (string?)null, (string?)null, 0, false, (int?)null) && panel is { IsVisible: true } && panel.Owner == display,
                 "edge add opens an editor owned by the overlay on the requested side");
             var firstPanel = panel!;
             var rowPicker = InGroup(support.Id).Single(b => Name(b) == $"Add a row to {support.Name}, column 2");
             rowPicker.RaiseEvent(new W.RoutedEventArgs(C.Button.ClickEvent));
-            check(!firstPanel.IsVisible && editorRequests.Last() == (support.Side, support.Id, (string?)null, 1, false),
-                "the row control addresses the selected group's second column");
+            check(!firstPanel.IsVisible && editorRequests.Last() == (support.Side, support.Id, (string?)null, 1, false, (int?)null),
+                "the second visible row + in a sparse saved group targets its second compacted column");
             var columnPicker = InGroup(support.Id).Single(b => Name(b) == $"Add a column to {support.Name}");
             columnPicker.RaiseEvent(new W.RoutedEventArgs(C.Button.ClickEvent));
-            check(editorRequests.Last() == (support.Side, support.Id, (string?)null, support.Columns, true),
-                "the column control opens a picker targeting the next column in the same group");
+            check(editorRequests.Last() == (support.Side, support.Id, (string?)null, support.Columns, true, 0),
+                "the right-hand + in a sparse saved group targets the next contiguous column");
             var lastPicker = panel!;
             var editable = display.dockRows[0];
             ((C.Button)editable.Border.Child).RaiseEvent(new W.RoutedEventArgs(C.Button.ClickEvent));
@@ -194,7 +298,8 @@ public partial class SpellOverlayManagerWindow
                 && WatchList.Items.OfType<SpellWatchChoice>().First().Name == "My spell", "alias editor updates the watched label without replacing spell identity");
             SpellAlias.Text = ""; check(selected.Spells[0].Alias is null, "clearing the alias restores the normal name");
             dockSelection = "support"; LoadDockEditor();
-            UpdateDock(SelectedDock! with { Scale = 1.35 }); int previousColumns = SelectedDock!.Columns;
+            UpdateDock(SelectedDock! with { Scale = 1.35, ButtonIds = ["invis", "assist", "heal"] }); int previousColumns = SelectedDock!.Columns;
+            var legacyCells = SelectedDock.PositionedLayout;
             dockTitle!.BeginEdit(); dockTitle.Editor.Text = " ";
             check(dockTitle.Commit() && SelectedDock is { Id: "support", Name: "" } && SelectedDock.EditorName.Contains("Bottom"),
                 "Clearing the dock title preserves its selection and shows the edge in its settings label.");
@@ -202,7 +307,9 @@ public partial class SpellOverlayManagerWindow
             dockSideChoice!.SelectedItem = SpellDockSide.Left; AddDockColumn();
             check(SelectedDock is { Name: "Renamed support", Scale: 1.35, Side: SpellDockSide.Left } && SelectedDock.Columns == previousColumns + 1 && selected.Scale == original.Scale,
                 "group settings rename and add columns while preserving its existing size independently of the spell body");
-            check(dockOrder!.EntryCount == 2 && savedDockButtons.Length == 4, "group editor retains ordered references and the saved button library");
+            check(dockOrder!.EntryCount == 3 && savedDockButtons.Length == 4 &&
+                SelectedDock!.PositionedLayout.ToHashSet().SetEquals(legacyCells),
+                "Adding a column in Settings keeps all original cells of a legacy two-column group, including its second row.");
             var groupPicker = DockEditorHost.Children.OfType<C.DockPanel>().Single();
             var remove = groupPicker.Children.OfType<C.Button>().Single();
             var before = selected!.DockGroups!;

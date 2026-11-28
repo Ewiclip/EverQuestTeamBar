@@ -21,15 +21,15 @@ internal sealed partial class FloatingWorkspace
     private RectangleF[] GroupCells(Surface surface)
     {
         var rows = new int[surface.Group!.Columns];
-        float height = FloatingPainter.ActionHeight;
-        float top = FloatingPainter.ActionBounds(0, FloatingPainter.ShowsHeader(surface.Heading, appearance)).Top;
-        return surface.Members.Select(m => new RectangleF(m.Column * 224 + 9,
-            top + rows[m.Column]++ * (height + 9), 206, height)).ToArray();
+        bool header = FloatingPainter.ShowsHeader(surface.Heading, appearance);
+        return surface.Members.Select(m => FloatingPainter.ActionBounds(m.Column, header, rows[m.Column]++)).ToArray();
     }
     private Size GroupCanvas(Surface surface)
     {
         var cells = GroupCells(surface);
-        int emptyHeight = FloatingPainter.ShowsHeader(surface.Heading, appearance) ? 55 : 40;
-        return new(surface.Group!.Columns * 224, (int)Math.Ceiling(cells.Length == 0 ? emptyHeight : cells.Max(c => c.Bottom) + 9));
+        bool header = FloatingPainter.ShowsHeader(surface.Heading, appearance);
+        var size = FloatingPainter.LogicalSize(surface.Group!.Columns, header);
+        size.Height = cells.Length == 0 ? (header ? 55 : 40) : (int)Math.Ceiling(cells.Max(c => c.Bottom)) + FloatingPainter.OuterPadding;
+        return size;
     }
 }

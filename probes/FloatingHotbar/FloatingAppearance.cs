@@ -68,10 +68,19 @@ internal static class FloatingThemes
 // The runtime and Settings preview share geometry and paint code. No theme uses game textures.
 internal static class FloatingPainter
 {
-    internal const int ActionHeight = 42;
+    internal const int OuterPadding = 3;
+    private const int HeaderHeight = 18;
+    private const int ActionWidth = 206, ActionHeight = 42;
+    private const int ColumnGap = 18, RowGap = 9;
     internal static bool ShowsHeader(string heading, FloatingAppearance appearance) => !appearance.HideHeaders && !string.IsNullOrWhiteSpace(heading);
-    internal static Size LogicalSize(int actions, bool showHeader) => new(224 * actions, (showHeader ? 38 : 18) + ActionHeight);
-    internal static RectangleF ActionBounds(int index, bool showHeader) => new(index * 224 + 9, showHeader ? 29 : 9, 206, ActionHeight);
+    internal static Size LogicalSize(int columns, bool showHeader)
+    {
+        var last = ActionBounds(Math.Max(0, columns - 1), showHeader);
+        return new(columns == 0 ? 0 : (int)last.Right + OuterPadding, (int)last.Bottom + OuterPadding);
+    }
+    internal static RectangleF ActionBounds(int column, bool showHeader, int row = 0) =>
+        new(OuterPadding + column * (ActionWidth + ColumnGap),
+            OuterPadding + (showHeader ? HeaderHeight + OuterPadding : 0) + row * (ActionHeight + RowGap), ActionWidth, ActionHeight);
     internal static string ActionHint(ButtonMapping action)
     {
         string detail = action.DisabledReason ?? string.Join("\n", action.Targets.Select(t => t.Character + " · " + t.Key));
@@ -99,15 +108,17 @@ internal static class FloatingPainter
     private static void DrawGrip(Graphics g, Color color, bool locked)
     {
         using var pen = new Pen(color, 1.1f);
+        float x = OuterPadding + 3, y = OuterPadding + 3;
         if (locked)
         {
-            g.DrawArc(pen, 13, 7, 6, 7, 180, 180);
-            using var body = Shape(new(11.5f, 12, 9, 7), 1.5f); g.DrawPath(pen, body);
+            g.DrawArc(pen, x + 1.5f, y, 6, 7, 180, 180);
+            using var body = Shape(new(x, y + 5, 9, 7), 1.5f); g.DrawPath(pen, body);
         }
         else
         {
             using var dots = new SolidBrush(color);
-            foreach (float x in new[] { 12f, 17f }) foreach (float y in new[] { 8f, 12f, 16f }) g.FillEllipse(dots, x, y, 1.8f, 1.8f);
+            for (int col = 0; col < 2; col++)
+                for (int row = 0; row < 3; row++) g.FillEllipse(dots, x + col * 5, y + 1 + row * 4, 1.8f, 1.8f);
         }
     }
     internal static void Draw(Graphics g, string heading, ButtonMapping[] actions, FloatingAppearance appearance,
@@ -131,7 +142,8 @@ internal static class FloatingPainter
         if (showHeader)
         {
             DrawGrip(g, mutedColor, appearance.Locked);
-            g.DrawString(heading, headingFont, accentBrush, new RectangleF(29, 6, size.Width - 42, 18), format);
+            const int headingLeft = OuterPadding + HeaderHeight;
+            g.DrawString(heading, headingFont, accentBrush, new RectangleF(headingLeft, OuterPadding, size.Width - headingLeft - OuterPadding, HeaderHeight), format);
         }
         for (int i = 0; i < actions.Length; i++)
         {

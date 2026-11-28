@@ -81,7 +81,8 @@ internal static class RoutingConflictTests
             var appearance = new FloatingAppearance { ThemeId = theme };
             using var bitmap = new Bitmap(448, 80); using var graphics = Graphics.FromImage(bitmap);
             FloatingPainter.Draw(graphics, "FICTIONAL CONFLICT FIXTURE", [mapped, Routing.DisplayButton(team, "healthy", bindings)], appearance, pressed: 0, hovered: 0);
-            var border = bitmap.GetPixel(20, 29); var expected = FloatingPainter.ConflictColor(appearance.Selected);
+            var firstButton = FloatingPainter.ActionBounds(0, true);
+            var border = bitmap.GetPixel((int)firstButton.Left + 17, (int)firstButton.Top); var expected = FloatingPainter.ConflictColor(appearance.Selected);
             Check(border.R == expected.R && border.G == expected.G && border.B == expected.B,
                 "A conflicted floating button keeps its red border under hover and press in the " + theme + " theme.");
             bitmap.Save(output + "." + theme + ".png");

@@ -144,6 +144,7 @@ internal sealed partial class SpellOverlayWindow
     internal void ToggleLayoutLock(bool? locked = null)
     {
         if (currentDefinition is null) return;
+        if (!FinishDockTitle(save: true)) return;
         EndButtonEditing();
         CancelLayoutEdit(); CommitLayout(new(Locked: locked ?? !currentDefinition.Locked)); RefreshLayout();
     }

@@ -1,5 +1,6 @@
 using W = System.Windows;
 using C = System.Windows.Controls;
+using I = System.Windows.Input;
 using M = System.Windows.Media;
 namespace TeamBar;
 
@@ -14,6 +15,7 @@ internal sealed partial class SpellOverlayWindow
     private string? dockError;
     private string dockLayoutKey = "";
     private EqIconArtwork? dockArtwork;
+    private (C.TextBox Field, string GroupId, string Original)? dockTitleEdit;
     private void InitializeDockLayout()
     {
         for (int i = 0; i < 5; i++) { dockRoot.ColumnDefinitions.Add(new() { Width = W.GridLength.Auto }); dockRoot.RowDefinitions.Add(new() { Height = W.GridLength.Auto }); }
@@ -36,8 +38,15 @@ internal sealed partial class SpellOverlayWindow
         var artwork = EqIconArtwork.Shared;
         string key = System.Text.Json.JsonSerializer.Serialize(new { groups, definition.Scale, edit = CanEdit, editingButtons, dockError, entries, facesById });
         if (key == dockLayoutKey && ReferenceEquals(dockArtwork, artwork)) return;
+        if (editingButtons && IsMouseCaptureWithin) return;
+        if (dockTitleEdit is { } active)
+        {
+            // Roster and availability updates rebuild the dock. Keep the live text field and its caret until the edit ends.
+            if (editingButtons && groups.Any(g => g.Id == active.GroupId)) return;
+            FinishDockTitle(save: false);
+        }
         dockArtwork = artwork;
-        dockLayoutKey = key; CancelSpellClick(); dockRows.Clear(); dockPanels.Clear();
+        dockLayoutKey = key; CancelSpellClick(); dockRows.Clear(); dockPanels.Clear(); dockDropGrids.Clear();
         foreach (var stack in dockSides.Values) stack.Children.Clear();
         foreach (var old in dockRoot.Children.OfType<C.Button>().ToArray()) dockRoot.Children.Remove(old);
         if (editingButtons)
@@ -45,22 +54,34 @@ internal sealed partial class SpellOverlayWindow
             var occupiedSides = groups.Select(g => g.Side).ToHashSet();
             foreach (var side in Enum.GetValues<SpellDockSide>().Where(side => !occupiedSides.Contains(side)))
             {
-                var add = MakeAddButton("+", $"Add a button on the {side.ToString().ToLowerInvariant()}", side);
+                var add = MakeAddButton($"Add a button on the {side.ToString().ToLowerInvariant()}", side);
                 C.Grid.SetColumn(add, side == SpellDockSide.Left ? 0 : side == SpellDockSide.Right ? 4 : 2);
                 C.Grid.SetRow(add, side == SpellDockSide.Top ? 0 : side == SpellDockSide.Bottom ? 4 : 2);
                 dockRoot.Children.Add(add);
             }
         }
-        foreach (var group in groups)
+        foreach (var savedGroup in groups)
         {
+            var group = savedGroup.CompactColumns();
             if (!editingButtons && !group.ButtonIds.Any(id => entries[id].Visible)) continue;
             var stack = new C.StackPanel();
-            if (!string.IsNullOrWhiteSpace(group.Name))
-                stack.Children.Add(new C.TextBlock { Text = group.Name.ToUpperInvariant(), FontSize = 11, Foreground = Brush(theme.Accent), Margin = new(0, 0, CanEdit ? 22 : 0, 8), TextTrimming = W.TextTrimming.CharacterEllipsis });
+            var header = new C.Grid { Margin = new(3, 3, 3, 0) };
+            if (editingButtons) header.Children.Add(DockTitleField(group));
+            else if (!string.IsNullOrWhiteSpace(group.Name))
+                header.Children.Add(new C.TextBlock { Text = group.Name, FontSize = 11, Foreground = Brush(theme.Accent), Margin = new(0, 0, CanEdit ? 22 : 0, 8), TextTrimming = W.TextTrimming.CharacterEllipsis });
+            var grip = new C.Border { Width = 22, Height = 22, Background = M.Brushes.Transparent, HorizontalAlignment = W.HorizontalAlignment.Right,
+                VerticalAlignment = W.VerticalAlignment.Top, Cursor = I.Cursors.SizeNWSE,
+                ToolTip = "Resize only this button group", Child = new C.TextBlock { Text = "⤢", Foreground = Brush(theme.Accent), FontSize = 20 } };
+            W.Automation.AutomationProperties.SetName(grip, "Resize " + group.EditorName);
+            if (CanEdit) header.Children.Add(grip);
+            if (header.Children.Count > 0) stack.Children.Add(header);
             var buttons = new C.Grid();
+            if (editingButtons) dockDropGrids.Add(buttons);
             for (int col = 0; col < group.Columns; col++) buttons.ColumnDefinitions.Add(new());
-            var columnRows = new int[group.Columns];
-            foreach (var placement in group.Layout)
+            var placements = group.PositionedLayout;
+            // Legacy bars packed visible buttons together as recipients logged in and out.
+            var visibleRows = !editingButtons && !group.Layout.Any(p => p.Row.HasValue) ? new int[group.Columns] : null;
+            foreach (var placement in placements)
             {
                 string id = placement.ButtonId;
                 var entry = entries[id];
@@ -73,7 +94,7 @@ internal sealed partial class SpellOverlayWindow
                 var button = new C.Border { Background = entry.HasConflict ? new M.SolidColorBrush(M.Color.FromRgb(conflictFill.R, conflictFill.G, conflictFill.B)) : Brush(theme.Button),
                     BorderBrush = entry.HasConflict ? conflictBrush : Brush(theme.ButtonBorder), BorderThickness = new(entry.HasConflict ? 2 : 1),
                     CornerRadius = new(5), Padding = new(8), Margin = new(3), MinHeight = 42, Opacity = editingButtons || entry.HasConflict || entry.Available && dockError is null ? 1 : .5,
-                    ToolTip = editingButtons ? "Edit " + managementName : dockError ?? entry.Hint, Cursor = editingButtons || entry.Available ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow };
+                    ToolTip = editingButtons ? $"Click to edit {managementName} · Drag to move" : dockError ?? entry.Hint, Cursor = editingButtons || entry.Available ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow };
                 var face = DockButtonFace(entry.Label, savedFace?.Icon, artwork, entry.HasConflict ? conflictBrush : Brush(theme.Text));
                 if (editingButtons)
                 {
@@ -81,25 +102,22 @@ internal sealed partial class SpellOverlayWindow
                         BorderThickness = new(0), Foreground = Brush(theme.Accent), Padding = new(8), Cursor = System.Windows.Input.Cursors.Hand };
                     W.Automation.AutomationProperties.SetName(editButton, "Edit " + managementName);
                     button.Padding = new(0); button.Child = editButton;
+                    button.Tag = new DockDropTarget(savedGroup, placement.Column, id);
+                    editButton.PreviewMouseLeftButtonDown += (_, e) => BeginDockButtonPress(editButton, savedGroup, id, e.GetPosition(this));
                     editButton.Click += (_, _) => RequestButtonEditor(button, group.Side, group.Id, id, placement.Column);
                 }
                 else button.Child = face;
                 W.Automation.AutomationProperties.SetName(button, managementName);
-                int row = columnRows[placement.Column]++;
-                while (buttons.RowDefinitions.Count <= row) buttons.RowDefinitions.Add(new() { Height = W.GridLength.Auto });
+                int row = visibleRows is null ? placement.Row!.Value : visibleRows[placement.Column]++;
+                while (buttons.RowDefinitions.Count <= row) buttons.RowDefinitions.Add(new() { Height = W.GridLength.Auto, MinHeight = 48 });
                 C.Grid.SetColumn(button, placement.Column); C.Grid.SetRow(button, row);
                 buttons.Children.Add(button); dockRows.Add((button, group.Id, dockError is null ? entry : entry with { Available = false }));
             }
-            if (editingButtons) AddColumnControls(buttons, group, columnRows);
+            double addColumnWidth = editingButtons && group.Columns < ButtonColumns.MaxColumns ? 32 : 0;
+            if (editingButtons) AddColumnControls(buttons, savedGroup, placements, addColumnWidth);
             stack.Children.Add(buttons);
-            var grid = new C.Grid(); grid.Children.Add(stack);
-            var grip = new C.Border { Width = 22, Height = 22, Background = M.Brushes.Transparent, HorizontalAlignment = W.HorizontalAlignment.Right,
-                VerticalAlignment = W.VerticalAlignment.Bottom, Cursor = System.Windows.Input.Cursors.SizeNWSE, Visibility = CanEdit ? W.Visibility.Visible : W.Visibility.Collapsed,
-                ToolTip = "Resize only this button group", Child = new C.TextBlock { Text = "⤢", Foreground = Brush(theme.Accent), FontSize = 20 } };
-            if (!editingButtons) stack.Margin = new(0, 0, 0, 18);
-            W.Automation.AutomationProperties.SetName(grip, "Resize " + group.EditorName); grid.Children.Add(grip);
-            var panel = new C.Border { Width = group.Columns * 112 + 20, Background = Brush(theme.Bar), BorderBrush = Brush(theme.BarBorder),
-                BorderThickness = new(1), CornerRadius = new(9), Padding = new(10), Child = grid };
+            var panel = new C.Border { Width = group.Columns * 112 + addColumnWidth, Background = Brush(theme.Bar), BorderBrush = Brush(theme.BarBorder),
+                BorderThickness = new(1), CornerRadius = new(9), Child = stack };
             // The outer overlay Viewbox scales with the spell body. Inverse-scale
             // group layout so its own saved size remains independent of that body.
             panel.LayoutTransform = new M.ScaleTransform(group.Scale / definition.Scale, group.Scale / definition.Scale);
@@ -107,6 +125,43 @@ internal sealed partial class SpellOverlayWindow
             dockSides[group.Side].Children.Add(panel); dockPanels[group.Id] = (panel, grip);
         }
         measureNeeded = true;
+    }
+
+    private C.Grid DockTitleField(SpellDockGroup group)
+    {
+        var field = new C.TextBox { Text = group.Name, MaxLength = 40, FontSize = 11, Padding = new(5, 3, 5, 3),
+            Background = Brush(theme.Button), Foreground = Brush(theme.Accent), CaretBrush = Brush(theme.Accent),
+            BorderBrush = Brush(theme.ButtonBorder), BorderThickness = new(1), ToolTip = "Group name · Enter to save · Esc to cancel" };
+        W.Automation.AutomationProperties.SetName(field, $"{group.Side} group name");
+        var placeholder = new C.TextBlock { Text = "Group name", FontSize = 11, Margin = new(6, 0, 0, 0),
+            VerticalAlignment = W.VerticalAlignment.Center, Foreground = Brush(theme.DetailText ?? theme.Text), Opacity = .7,
+            IsHitTestVisible = false, Visibility = field.Text.Length == 0 ? W.Visibility.Visible : W.Visibility.Collapsed };
+        field.TextChanged += (_, _) => placeholder.Visibility = field.Text.Length == 0 ? W.Visibility.Visible : W.Visibility.Collapsed;
+        field.GotKeyboardFocus += (_, _) => dockTitleEdit = (field, group.Id, field.Text);
+        field.LostKeyboardFocus += (_, _) => { if (dockTitleEdit?.Field == field) FinishDockTitle(save: true); };
+        field.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key is not (I.Key.Enter or I.Key.Escape)) return;
+            e.Handled = true;
+            FinishDockTitle(save: e.Key == I.Key.Enter);
+            I.Keyboard.ClearFocus();
+        };
+        var header = new C.Grid { Margin = new(0, 0, 0, 5) };
+        header.Children.Add(field); header.Children.Add(placeholder);
+        return header;
+    }
+
+    private bool FinishDockTitle(bool save)
+    {
+        if (dockTitleEdit is not { } active) return true;
+        dockTitleEdit = null;
+        var text = active.Field.Text.Trim();
+        if (!save || text == active.Original) { active.Field.Text = active.Original; return true; }
+        bool saved = CommitLayout(new(GroupId: active.GroupId, GroupName: text, ExpectedGroupName: active.Original));
+        active.Field.Text = saved ? text : currentDefinition?.DockGroups?.FirstOrDefault(g => g.Id == active.GroupId)?.Name ?? active.Original;
+        buttonEditError = saved ? null : layoutError;
+        UpdateClickHint();
+        return saved;
     }
 
     private W.FrameworkElement DockButtonFace(string name, string? icon, EqIconArtwork artwork, M.Brush foreground)
@@ -136,23 +191,41 @@ internal sealed partial class SpellOverlayWindow
         return label;
     }
 
-    private void AddColumnControls(C.Grid grid, SpellDockGroup group, int[] columnRows)
+    private void AddColumnControls(C.Grid grid, SpellDockGroup group, ButtonPlacement[] placements, double addColumnWidth)
     {
+        int height = grid.RowDefinitions.Count;
+        int columns = grid.ColumnDefinitions.Count;
+        var occupied = placements.Select(p => (p.Column, p.Row!.Value)).ToHashSet();
         grid.RowDefinitions.Add(new() { Height = W.GridLength.Auto });
-        for (int column = 0; column < group.Columns; column++)
+        for (int col = 0; col < columns; col++)
         {
-            var controls = new C.DockPanel { Margin = new(2, 1, 2, 0), VerticalAlignment = W.VerticalAlignment.Top };
-            if (column == group.Columns - 1 && group.Columns < ButtonColumns.MaxColumns)
+            for (int row = 0; row < height; row++)
             {
-                var addColumn = MakeAddButton("+ Column", $"Add a column to {group.EditorName}", group.Side, group.Id,
-                    group.Columns, addColumn: true);
-                C.DockPanel.SetDock(addColumn, C.Dock.Right);
-                controls.Children.Add(addColumn);
+                if (occupied.Contains((col, row))) continue;
+                AddAt($"Add a button to {group.EditorName}, column {col + 1}, row {row + 1}", col, row, row,
+                    W.VerticalAlignment.Center);
             }
-            controls.Children.Add(MakeAddButton("+ Row", $"Add a row to {group.EditorName}, column {column + 1}",
-                group.Side, group.Id, column));
-            C.Grid.SetColumn(controls, column); C.Grid.SetRow(controls, columnRows[column]);
-            grid.Children.Add(controls);
+            AddAt($"Add a row to {group.EditorName}, column {col + 1}", col, height,
+                occupied.Contains((col, height - 1)) ? null : height, W.VerticalAlignment.Top);
+        }
+        if (addColumnWidth > 0)
+        {
+            grid.ColumnDefinitions.Add(new() { Width = new W.GridLength(addColumnWidth) });
+            for (int row = 0; row < height; row++)
+            {
+                string action = $"Add a column to {group.EditorName}" + (row == 0 ? "" : $" at row {row + 1}");
+                AddAt(action, columns, row, row, W.VerticalAlignment.Stretch, newColumn: true);
+            }
+        }
+
+        void AddAt(string action, int column, int gridRow, int? targetRow, W.VerticalAlignment alignment, bool newColumn = false)
+        {
+            var add = MakeAddButton(action, group.Side, group.Id, column, newColumn, targetRow);
+            add.Tag = new DockDropTarget(group, column, NewColumn: newColumn, Row: targetRow);
+            add.Margin = gridRow == height ? new(3, 2, 3, 3) : new(3);
+            add.VerticalAlignment = alignment;
+            C.Grid.SetColumn(add, column); C.Grid.SetRow(add, gridRow);
+            grid.Children.Add(add);
         }
     }
     private string? ResizingDock => dockPanels.FirstOrDefault(p => p.Value.Grip.IsMouseOver).Key;

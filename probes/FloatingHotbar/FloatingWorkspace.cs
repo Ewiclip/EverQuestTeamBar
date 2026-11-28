@@ -356,7 +356,7 @@ internal sealed partial class FloatingWorkspace : Form
         var screen = PointToScreen(e.Location); var surface = At(screen); if (surface is null) return;
         downForeground = Native.GetForegroundWindow(); downBounds = surface.Bounds; var point = Local(surface, screen);
         // An untitled surface keeps its top padding as a drag handle above the first action.
-        if (!appearance.Locked && !appearance.HideHeaders && point.Y < (FloatingPainter.ShowsHeader(surface.Heading, appearance) ? 27 : 9))
+        if (!appearance.Locked && !appearance.HideHeaders && point.Y < FloatingPainter.ActionBounds(0, FloatingPainter.ShowsHeader(surface.Heading, appearance)).Top)
         { dragged = surface; dragOffset = new(screen.X - surface.Bounds.X, screen.Y - surface.Bounds.Y); }
         else { pressed = surface; pressedAction = ActionAt(surface, point); }
         Capture = true; Invalidate();

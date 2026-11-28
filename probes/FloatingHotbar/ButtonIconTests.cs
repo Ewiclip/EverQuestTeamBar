@@ -55,8 +55,8 @@ internal sealed partial class SpellOverlayWindow
             check(dockButton.Child is C.Image { HorizontalAlignment: System.Windows.HorizontalAlignment.Center } icon && ReferenceEquals(icon.Source, source)
                 && System.Windows.Automation.AutomationProperties.GetName(dockButton) == iconOnly.Value.ManagementName,
                 "A nameless docked button centers the icon and retains an accessible name.");
-            var stack = ((C.Grid)panel.Child).Children.OfType<C.StackPanel>().Single();
-            check(stack.Children.OfType<C.TextBlock>().Count() == 0 && window.heading.Text == definition.CharacterPersona,
+            check(!SpellOverlayManagerWindow.OverlayTestControls(panel).OfType<C.TextBlock>().Any() &&
+                window.heading.Text == definition.CharacterPersona,
                 "Nameless groups omit their title row and nameless spell bars show the character without a separator.");
             window.Render(definition with { DockGroups = [definition.DockGroups![0].WithLayout([])] }, new("Test target", "", []));
             check(window.dockPanels.Count == 0 && window.dockRows.Count == 0,

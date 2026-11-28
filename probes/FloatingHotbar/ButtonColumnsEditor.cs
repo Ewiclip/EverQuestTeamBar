@@ -21,6 +21,7 @@ internal sealed class ButtonColumnsEditor : C.UserControl
     internal Func<W.Window, DeleteRequest, bool> ConfirmRemoval = DeleteConfirmation.Ask;
     internal int EntryCount => entries.Length;
     internal int MaxEntries { get; set; } = int.MaxValue;
+    internal bool PreserveRowAlignment { get; init; }
     private sealed record DragItem(ButtonColumnsEditor Owner, string Button);
     internal ButtonColumnsEditor()
     {
@@ -82,7 +83,7 @@ internal sealed class ButtonColumnsEditor : C.UserControl
                     {
                         if (W.Window.GetWindow(this) is not { } owner) return;
                         if (ConfirmRemoval(owner, new("Remove from this group?", label(id), "The saved button stays in your library and in any other groups.", "remove")))
-                            Change(entries.Where(e => e.ButtonId != id).ToArray());
+                            Change(ButtonColumns.Remove(entries, id, keepRows: PreserveRowAlignment && columns > 1));
                     };
                     list.Items.Add(row);
                 }
@@ -118,7 +119,7 @@ internal sealed class ButtonColumnsEditor : C.UserControl
                             int index = inColumn.IndexOf(target) + (e.GetPosition(item).Y > item.ActualHeight / 2 ? 1 : 0);
                             before = index < inColumn.Count ? inColumn[index] : null;
                         }
-                        if (before != drag.Button) Change(ButtonColumns.Move(entries, drag.Button, column, before));
+                        if (before != drag.Button) Move(drag.Button, column, before);
                     }
                     e.Handled = true;
                 };
@@ -139,17 +140,19 @@ internal sealed class ButtonColumnsEditor : C.UserControl
     internal void MoveWithKeyboard(string id, int rowDelta, int columnDelta)
     {
         int col = entries.Single(e => e.ButtonId == id).Column;
-        if (columnDelta != 0) { int next = Math.Clamp(col + columnDelta, 0, columns - 1); if (next != col) Change(ButtonColumns.Move(entries, id, next)); }
+        if (columnDelta != 0) { int next = Math.Clamp(col + columnDelta, 0, columns - 1); if (next != col) Move(id, next); }
         else
         {
             var ids = entries.Where(e => e.Column == col).Select(e => e.ButtonId).ToArray(); int old = Array.IndexOf(ids, id), next = old + rowDelta;
             if (next < 0 || next >= ids.Length) return;
-            Change(ButtonColumns.Move(entries, id, col, rowDelta < 0 ? ids[next] : next + 1 < ids.Length ? ids[next + 1] : null));
+            Move(id, col, rowDelta < 0 ? ids[next] : next + 1 < ids.Length ? ids[next + 1] : null);
         }
         foreach (var stack in root.Children.OfType<C.StackPanel>())
             foreach (var list in ((stack.Children.OfType<C.Border>().Single().Child as C.StackPanel)!).Children.OfType<C.ListBox>())
                 if (list.Items.OfType<C.Grid>().FirstOrDefault(r => r.Tag as string == id) is { } row)
                 { list.SelectedItem = row; list.UpdateLayout(); (list.ItemContainerGenerator.ContainerFromItem(row) as C.ListBoxItem)?.Focus(); }
     }
+    private void Move(string id, int column, string? before = null) =>
+        Change(ButtonColumns.Move(entries, id, column, before, keepSourceRows: PreserveRowAlignment));
     private bool Valid(W.DragEventArgs e) => e.Data.GetData(typeof(DragItem)) is DragItem drag && drag.Owner == this && entries.Any(p => p.ButtonId == drag.Button);
 }

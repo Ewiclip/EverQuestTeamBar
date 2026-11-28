@@ -94,6 +94,9 @@ internal static class SpellDockTests
             "repairing the saved button restores its docked availability");
         var layout = ButtonColumns.Legacy(["invis", "assist", "heal", "cure"], 2);
         check(layout.Select(p => p.Column).SequenceEqual([0, 1, 0, 1]), "legacy dock placement preserves its original row-major columns");
+        var legacyDock = Groups()[0] with { ButtonIds = ["invis", "assist", "heal", "cure"] };
+        check(legacyDock.PositionedLayout.ToHashSet().SetEquals([new("invis", 0, 0), new("assist", 1, 0), new("heal", 0, 1), new("cure", 1, 1)]),
+            "Legacy button IDs without saved coordinates open in their original rows and columns.");
         layout = ButtonColumns.Move(layout, "heal", 1, "assist");
         check(layout.Where(p => p.Column == 1).Select(p => p.ButtonId).SequenceEqual(["heal", "assist", "cure"]),
             "moving between columns preserves the requested within-column order");
@@ -107,5 +110,49 @@ internal static class SpellDockTests
             .SequenceEqual(explicitGroup.Placements!), "explicit column assignments survive profile save and reload");
         Invalid(definition with { DockGroups = [explicitGroup with { Columns = 1 }] }, "out-of-range column references are rejected");
         Invalid(definition with { DockGroups = [explicitGroup with { Placements = [new("heal", 0)] }] }, "inconsistent membership and placement are rejected");
+        Invalid(definition with { DockGroups = [explicitGroup with { Placements = [new("assist", 1, 2), new("invis", 1, 2)] }] },
+            "Two saved buttons cannot occupy the same cell.");
+        Invalid(definition with { DockGroups = [explicitGroup with { Placements = [new("assist", 1, -1), new("invis", 1, 0)] }] },
+            "A negative saved row is rejected.");
+        TestDockMoves(definition, check);
+    }
+
+    private static void TestDockMoves(SpellOverlayDefinition definition, Action<bool, string> check)
+    {
+        var source = new SpellDockGroup("travel", "Travel", SpellDockSide.Left, ["follow"], Scale: 1.2);
+        var target = new SpellDockGroup("combat", "Combat", SpellDockSide.Top, ["assist", "heal"], Columns: 4,
+            Placements: [new("assist", 0), new("heal", 2)]) { ColumnNames = ["First", "Empty", "Last", "Spare"] };
+        var bar = definition with { DockGroups = [source, target] };
+        var move = new SpellOverlayLayoutChange(ButtonMove: new(source, "follow", target, 1, "heal"));
+        var moved = move.Apply(bar);
+        var groups = moved.DockGroups!;
+        check(groups[0] is { Id: "travel", Name: "Travel", Scale: 1.2, ButtonIds.Length: 0 } &&
+            groups[1].ColumnNames!.SequenceEqual(["First", "Last"]) &&
+            groups[1].Layout.SequenceEqual([new("assist", 0), new("follow", 1), new("heal", 1)]),
+            "Dragging the final button out of a group preserves the empty group and inserts before the target in its displayed column.");
+
+        bool Rejects(SpellOverlayDefinition current, SpellOverlayLayoutChange change)
+        {
+            try { change.Apply(current); return false; }
+            catch (InvalidDataException) { return true; }
+        }
+        check(Rejects(moved, move), "A stale drop cannot move the button a second time.");
+        var changedTarget = target.WithLayout([.. target.Layout, new("shield", 3)]);
+        check(Rejects(bar with { DockGroups = [source, changedTarget] }, move),
+            "A destination changed since the drag began rejects the drop.");
+        var duplicate = target.WithLayout([.. target.Layout, new("follow", 2)]);
+        check(Rejects(bar with { DockGroups = [source, duplicate] },
+                new(ButtonMove: new(source, "follow", duplicate, 1, null))),
+            "A drop into a group already using the saved button cannot remove its original placement.");
+        var staggered = target.WithLayout([new("assist", 0, 0), new("heal", 2, 2)]);
+        var staggeredBar = bar with { DockGroups = [source, staggered] };
+        var fill = new SpellOverlayLayoutChange(ButtonMove: new(source, "follow", staggered, 1, null, Row: 1));
+        var filled = fill.Apply(staggeredBar).DockGroups![1];
+        check(filled.PositionedLayout.ToHashSet().SetEquals([new("assist", 0, 0), new("follow", 1, 1), new("heal", 1, 2)]) &&
+            filled.ColumnNames!.SequenceEqual(["First", "Last"]),
+            "Moving between groups into the middle cell of a sparse column preserves the surrounding rows and compacted column names.");
+        check(Rejects(staggeredBar, new(ButtonMove: new(source, "follow", staggered, 1, null, Row: 2))) &&
+            Rejects(staggeredBar with { DockGroups = [source, staggered.WithLayout([new("assist", 0, 0), new("heal", 2, 1)])] }, fill),
+            "A drop into an occupied cell or a column whose rows changed during dragging is rejected.");
     }
 }

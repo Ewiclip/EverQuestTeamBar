@@ -23,7 +23,7 @@ internal sealed partial class SpellOverlayWindow
         </ControlTemplate>
         """);
     private bool editingButtons;
-    private Action<SpellOverlayWindow, W.FrameworkElement, SpellDockSide, string?, string?, int, bool>? openButtonEditor;
+    private Action<SpellOverlayWindow, W.FrameworkElement, SpellDockSide, string?, string?, int, bool, int?>? openButtonEditor;
     private string? buttonEditError;
     private W.Window? buttonEditor;
     private W.FrameworkElement? editorAnchor;
@@ -33,7 +33,7 @@ internal sealed partial class SpellOverlayWindow
     private GameFrame? editAnchorFrame;
 
     internal string? ButtonEditorOverlayId => currentDefinition?.Id;
-    internal Action<SpellOverlayWindow, W.FrameworkElement, SpellDockSide, string?, string?, int, bool>? OpenButtonEditor
+    internal Action<SpellOverlayWindow, W.FrameworkElement, SpellDockSide, string?, string?, int, bool, int?>? OpenButtonEditor
     {
         get => openButtonEditor;
         set
@@ -55,7 +55,11 @@ internal sealed partial class SpellOverlayWindow
     {
         if (openButtonEditor is null || currentDefinition is null || clickBusy) return;
         CancelLayoutEdit(); CancelSpellClick();
-        if (editingButtons) EndButtonEditing();
+        if (editingButtons)
+        {
+            if (!FinishDockTitle(save: true)) return;
+            EndButtonEditing();
+        }
         else
         {
             if (IsVisible && W.PresentationSource.FromVisual(shell) is not null)
@@ -74,19 +78,21 @@ internal sealed partial class SpellOverlayWindow
     private void EndButtonEditing()
     {
         if (!editingButtons) return;
+        EndDockButtonDrag();
+        FinishDockTitle(save: false);
         editingButtons = false; editShellOrigin = null; editAnchorFrame = null;
         buttonEditError = null; CancelSpellClick();
         buttonEditor?.Close();
         UpdateButtonChrome();
     }
 
-    private void RequestButtonEditor(W.FrameworkElement anchor, SpellDockSide side, string? group, string? id, int column, bool addColumn = false)
+    private void RequestButtonEditor(W.FrameworkElement anchor, SpellDockSide side, string? group, string? id, int column, bool addColumn = false, int? row = null)
     {
         if (!editingButtons || currentDefinition is null || openButtonEditor is null) return;
         try
         {
             buttonEditError = null; UpdateClickHint();
-            openButtonEditor(this, anchor, side, group, id, column, addColumn);
+            openButtonEditor(this, anchor, side, group, id, column, addColumn, row);
         }
         catch (Exception error)
         {
@@ -164,16 +170,16 @@ internal sealed partial class SpellOverlayWindow
             Math.Clamp(y, area.Top, Math.Max(area.Top, area.Bottom - panel.Height)));
     }
 
-    private C.Button MakeAddButton(string label, string action, SpellDockSide side, string? group = null,
-        int column = 0, bool addColumn = false)
+    private C.Button MakeAddButton(string action, SpellDockSide side, string? group = null,
+        int column = 0, bool addColumn = false, int? row = null)
     {
         bool edge = group is null;
-        var button = new C.Button { Content = label, FontSize = edge ? 19 : 11, Padding = new(3, 0, 3, 0), Margin = new(1),
+        var button = new C.Button { Content = "+", FontSize = edge ? 19 : 16, Padding = new(3, 0, 3, 0), Margin = new(1),
             MinWidth = 26, MinHeight = edge ? 26 : 24, Foreground = Brush(theme.Accent), Background = Brush(theme.Bar),
             BorderBrush = Brush(theme.ButtonBorder), BorderThickness = new(1), Template = EditControlTemplate(),
             ToolTip = action, Cursor = I.Cursors.Hand };
         W.Automation.AutomationProperties.SetName(button, action);
-        button.Click += (_, _) => RequestButtonEditor(button, side, group, null, column, addColumn);
+        button.Click += (_, _) => RequestButtonEditor(button, side, group, null, column, addColumn, row);
         return button;
     }
 }

@@ -53,8 +53,9 @@ internal sealed partial class SpellOverlayWindow : W.Window
         shell = new C.Border { Background = Brush(theme.Bar), BorderBrush = Brush(theme.BarBorder), BorderThickness = new(1),
             CornerRadius = new(9), Padding = new(14), Child = content };
         InitializeDockLayout();
-        Content = new C.Viewbox { Stretch = M.Stretch.Uniform, StretchDirection = C.StretchDirection.Both, Child = dockRoot };
+        Content = WithDockDragPreview(new C.Viewbox { Stretch = M.Stretch.Uniform, StretchDirection = C.StretchDirection.Both, Child = dockRoot });
         InitializeLayoutInput();
+        InitializeDockButtonDrag();
         SourceInitialized += (_, _) =>
         {
             var source = (HwndSource)W.PresentationSource.FromVisual(this);

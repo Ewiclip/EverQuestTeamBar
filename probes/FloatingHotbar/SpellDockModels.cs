@@ -10,7 +10,89 @@ internal sealed record SpellDockGroup(string Id, string Name, SpellDockSide Side
     [System.Text.Json.Serialization.JsonIgnore]
     public string EditorName => string.IsNullOrWhiteSpace(Name) ? $"{Side} group · {Id[^Math.Min(6, Id.Length)..]}" : Name;
     internal ButtonPlacement[] Layout => Placements ?? ButtonColumns.Legacy(ButtonIds, Columns);
+    internal ButtonPlacement[] PositionedLayout => ButtonColumns.PositionRows(Layout);
+    internal void RequireVacantRow(int column, int row, string? movingButton = null)
+    {
+        var positions = PositionedLayout;
+        int height = positions.Length == 0 ? 0 : positions.Max(e => e.Row!.Value) + 1;
+        if (row < 0 || row > height || positions.Any(e => e.Column == column && e.Row == row && e.ButtonId != movingButton))
+            throw new InvalidDataException("This button slot is no longer available. Choose an empty slot.");
+    }
     internal SpellDockGroup WithLayout(ButtonPlacement[] entries) => this with { ButtonIds = entries.Select(e => e.ButtonId).ToArray(), Placements = entries };
+    internal bool HasSameColumnLayout(SpellDockGroup other) => Id == other.Id && Side == other.Side && Columns == other.Columns
+        && Layout.SequenceEqual(other.Layout) && ButtonColumns.Names(ColumnNames, Columns).SequenceEqual(ButtonColumns.Names(other.ColumnNames, other.Columns));
+
+    internal SpellDockGroup CompactColumns()
+    {
+        if (Columns == 1) return this;
+        var entries = Layout;
+        // An empty group keeps one column for the first button added from its edge.
+        int[] occupied = entries.Length == 0 ? [0] : entries.Select(e => e.Column).Distinct().Order().ToArray();
+        if (occupied.Length == Columns) return this;
+        return this with
+        {
+            Columns = occupied.Length,
+            ColumnNames = ColumnNames is { } names ? occupied.Select(column => names[column]).ToArray() : null,
+            Placements = entries.Select(e => e with { Column = Array.IndexOf(occupied, e.Column) }).ToArray()
+        };
+    }
+}
+
+internal sealed record DockButtonMove(SpellDockGroup SourceGroup, string ButtonId, SpellDockGroup TargetGroup, int Column,
+    string? BeforeButtonId = null, bool NewColumn = false, int? Row = null)
+{
+    internal SpellOverlayDefinition Apply(SpellOverlayDefinition definition)
+    {
+        var groups = definition.DockGroups ?? [];
+        SpellDockGroup Find(SpellDockGroup expected)
+        {
+            var current = groups.SingleOrDefault(group => group.Id == expected.Id);
+            if (current is null || !current.HasSameColumnLayout(expected))
+                throw new InvalidDataException("This button layout changed. Drag the button again.");
+            return current.CompactColumns();
+        }
+        var source = Find(SourceGroup);
+        var target = Find(TargetGroup);
+        var sourceEntries = source.Layout;
+        var targetEntries = target.Layout;
+        var placement = sourceEntries.SingleOrDefault(entry => entry.ButtonId == ButtonId)
+            ?? throw new InvalidDataException("This button is no longer in its original group.");
+        bool sameGroup = source.Id == target.Id;
+        if (!sameGroup && target.ButtonIds.Contains(ButtonId, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidDataException("This saved button is already in the destination group.");
+        if (NewColumn ? Column != target.Columns || Column >= ButtonColumns.MaxColumns : Column < 0 || Column >= target.Columns)
+            throw new InvalidDataException("This column is no longer available.");
+        if (BeforeButtonId is not null && (Row.HasValue || !targetEntries.Any(entry => entry.Column == Column && entry.ButtonId == BeforeButtonId)))
+            throw new InvalidDataException("The destination row changed. Drag the button again.");
+        if (Row is int row) target.RequireVacantRow(Column, row, sameGroup ? ButtonId : null);
+
+        if (sameGroup && Column == placement.Column && !Row.HasValue)
+        {
+            var columnRows = sourceEntries.Where(entry => entry.Column == Column);
+            var nextRow = columnRows.SkipWhile(entry => entry.ButtonId != ButtonId).Skip(1).FirstOrDefault();
+            if (BeforeButtonId == ButtonId || BeforeButtonId == nextRow?.ButtonId) return definition;
+        }
+        int destinationColumn = Column;
+        bool expand = NewColumn;
+        if (sameGroup && NewColumn && placement.Column == target.Columns - 1 && sourceEntries.Count(entry => entry.Column == placement.Column) == 1)
+        {
+            if (!Row.HasValue) return definition;
+            destinationColumn = placement.Column;
+            expand = false;
+        }
+        if (sameGroup && destinationColumn == placement.Column && Row.HasValue &&
+            source.PositionedLayout.Single(e => e.ButtonId == ButtonId).Row == Row) return definition;
+
+        var inserted = sameGroup
+            ? ButtonColumns.Move(sourceEntries, ButtonId, destinationColumn, BeforeButtonId, Row, keepSourceRows: true)
+            : ButtonColumns.Insert(targetEntries, placement with { Column = destinationColumn, Row = Row }, BeforeButtonId);
+        var destination = target.WithLayout(inserted);
+        if (expand) destination = destination with { Columns = Column + 1, ColumnNames = ButtonColumns.Names(target.ColumnNames, Column + 1) };
+        destination = destination.CompactColumns();
+        var updatedGroups = groups.Select(group => group.Id == target.Id ? destination
+            : group.Id == source.Id ? source.WithLayout(ButtonColumns.Remove(sourceEntries, ButtonId, keepRows: source.Columns > 1 || Row.HasValue)).CompactColumns() : group).ToArray();
+        return definition with { DockGroups = updatedGroups };
+    }
 }
 internal sealed record SpellDockButton(string Id, string Label, string Revision, string Recipients, bool Available, string Hint, bool Visible = true, bool HasConflict = false);
 internal sealed class InputRosterChangedException(string message) : IOException(message);

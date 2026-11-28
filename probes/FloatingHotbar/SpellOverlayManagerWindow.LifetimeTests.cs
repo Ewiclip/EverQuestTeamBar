@@ -184,6 +184,18 @@ public partial class SpellOverlayManagerWindow
             try
             {
                 await Loaded(second);
+                var reopened = second.floating[definition.Id];
+                check(second.savedLibrary.Overlays.Single(d => d.Id == definition.Id).DockGroups!.Any(g => g.Name == RestartedDockTitle) &&
+                    OverlayTestControls(reopened).OfType<System.Windows.Controls.TextBlock>().Any(t => t.IsVisible && t.Text == RestartedDockTitle),
+                    "Restarting the overlay manager restores the title entered directly on the floating dock group.");
+                var lower = OverlayTestControls(reopened).OfType<System.Windows.Controls.Border>()
+                    .Single(b => W.Automation.AutomationProperties.GetName(b) == "Lower fixture");
+                var middle = OverlayTestControls(reopened).OfType<System.Windows.Controls.Border>()
+                    .Single(b => W.Automation.AutomationProperties.GetName(b) == "Middle fixture");
+                check(lower.IsVisible && middle.IsVisible && System.Windows.Controls.Grid.GetColumn(lower) == 1 &&
+                    System.Windows.Controls.Grid.GetColumn(middle) == 1 && System.Windows.Controls.Grid.GetRow(lower) == 2 &&
+                    System.Windows.Controls.Grid.GetRow(middle) == 1,
+                    "The restarted overlay displays the middle and lower buttons in their saved rows with the top cell vacant.");
                 second.Hide_Click(second, new());
                 check(second.floating.Count == 0 && !store.Load().SpellOverlaysLoaded, "explicit Hide stops overlays and disables automatic restoration");
                 second.ApplySaved();

@@ -69,7 +69,7 @@ public partial class SpellOverlayManagerWindow
         W.Automation.AutomationProperties.SetName(dockSideChoice, "Dock edge");
         dockSideChoice.SelectionChanged += (_, _) => { if (!loadingDock && SelectedDock is { } group && dockSideChoice.SelectedItem is SpellDockSide side) UpdateDock(group with { Side = side }); };
         edge.Children.Add(dockSideChoice); DockEditorHost.Children.Add(edge);
-        dockOrder = new ButtonColumnsEditor();
+        dockOrder = new ButtonColumnsEditor { PreserveRowAlignment = true };
         dockOrder.Changed += entries => { if (SelectedDock is { } group) UpdateDock(group.WithLayout(entries)); };
         dockOrder.ColumnAdded += AddDockColumn;
         dockOrder.ColumnRenamed += (column, name) =>
@@ -96,7 +96,12 @@ public partial class SpellOverlayManagerWindow
     private void AddDockColumn()
     {
         if (SelectedDock is not { } group || group.Columns >= ButtonColumns.MaxColumns) return;
-        UpdateDock(group with { Columns = group.Columns + 1, ColumnNames = ButtonColumns.Names(group.ColumnNames, group.Columns + 1) }); FillDockOrder();
+        UpdateDock(group.WithLayout(group.Layout) with
+        {
+            Columns = group.Columns + 1,
+            ColumnNames = ButtonColumns.Names(group.ColumnNames, group.Columns + 1)
+        });
+        FillDockOrder();
     }
     private void AddSavedDockButton(int column) => Act(() =>
     {
@@ -105,19 +110,27 @@ public partial class SpellOverlayManagerWindow
         if (!review) { savedDockButtons = ReadDockButtons(); dockLibraryError = null; }
         if (dockLibraryError is not null) throw new IOException(dockLibraryError);
         string? id = ChooseDockButton((W.Window?)settingsOwner ?? this, ButtonColumns.Names(original.ColumnNames, original.Columns)[column], savedDockButtons, original.ButtonIds);
-        if (id is null || selected?.Id != overlayId || SelectedDock is not { } group || group.Id != original.Id || column >= group.Columns
+        if (id is null || selected?.Id != overlayId || SelectedDock is not { } group || !group.HasSameColumnLayout(original)
             || group.ButtonIds.Contains(id) || !savedDockButtons.Any(b => b.Value.Id == id)) return;
-        UpdateDock(group.WithLayout([.. group.Layout, new(id, column)])); FillDockOrder();
+        UpdateDock(group.WithLayout(ButtonColumns.Insert(group.Layout, new(id, column), null))); FillDockOrder();
     });
     private void UpdateDock(SpellDockGroup group)
     {
         if (selected is null) return;
         Replace(selected with { DockGroups = (selected.DockGroups ?? []).Select(g => g.Id == group.Id ? group : g).ToArray() });
-        if (dockGroupsChoice is not null)
+        RefreshDockChoices();
+    }
+    private void RefreshDockChoices(string? renamedGroupId = null)
+    {
+        if (dockGroupsChoice is null) return;
+        bool wasLoading = loadingDock; loadingDock = true;
+        try
         {
-            bool wasLoading = loadingDock; loadingDock = true;
-            dockGroupsChoice.ItemsSource = selected.DockGroups; dockGroupsChoice.SelectedItem = SelectedDock; loadingDock = wasLoading;
+            dockGroupsChoice.ItemsSource = selected?.DockGroups; dockGroupsChoice.SelectedItem = SelectedDock;
+            if (renamedGroupId is not null && SelectedDock is { } current && current.Id == renamedGroupId && dockTitle is not null)
+                dockTitle.Editor.Text = current.Name;
         }
+        finally { loadingDock = wasLoading; }
     }
     private void FillDockOrder()
     {

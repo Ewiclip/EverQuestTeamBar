@@ -10,7 +10,7 @@ public partial class SpellOverlayManagerWindow
         new(theme, SaveFloatingLayout, OpenOverlaySettings) { OpenButtonEditor = OpenFloatingButtonEditor };
 
     private void OpenFloatingButtonEditor(SpellOverlayWindow owner, W.FrameworkElement anchor, SpellDockSide side,
-        string? groupId, string? buttonId, int column, bool newColumn)
+        string? groupId, string? buttonId, int column, bool newColumn, int? row)
     {
         if (owner.ButtonEditorOverlayId is not { } overlayId) return;
         var bar = EditableBar(owner, overlayId);
@@ -39,7 +39,7 @@ public partial class SpellOverlayManagerWindow
                     throw new InvalidDataException("This group's layout changed. Choose the row or column again.");
             }
             SaveOverlayButton(owner, overlayId, profile, new(action, side, group?.Id, source, draft,
-                ExistingPlacement: buttonId is not null, Column: column, PlacementId: buttonId, NewColumn: newColumn));
+                Column: column, PlacementId: buttonId, NewColumn: newColumn, Row: row));
         }
         void Show(W.Window panel) => owner.ShowButtonEditor(panel, anchor, side);
         void ShowEditor(SavedButton? source)
@@ -54,20 +54,17 @@ public partial class SpellOverlayManagerWindow
                     defaultTarget is null ? [] : [new(new(CharacterId: defaultTarget.Id), "")], [], Floating: false)
                 : source.Value with { Characters = recipientTeam.Characters, Personas = recipientTeam.Personas };
             int uses = source is null ? 0 : ButtonPlacementCount(source.Value, savedLibrary, team);
-            Show(OverlayButtonEditor.CreateEditor(theme, draft, source is null, uses, (edited, independent) =>
-            {
-                var action = source is null ? OverlayButtonAction.Create :
-                    independent ? OverlayButtonAction.MakeIndependent : OverlayButtonAction.EditSynced;
-                Save(action, source, edited);
-            }, remove: source is null ? null : () => Save(OverlayButtonAction.Remove, source)));
+            Show(OverlayButtonEditor.CreateEditor(theme, draft, source is null, uses,
+                edited => Save(source is null ? OverlayButtonAction.Create : OverlayButtonAction.EditSynced, source, edited),
+                remove: source is null ? null : () => Save(OverlayButtonAction.Remove, source)));
         }
 
         if (buttonId is null)
         {
             string title = groupId is null ? "Add a button" : newColumn ? $"Start column {column + 1}" : $"Add to column {column + 1}";
+            if (row is { } selectedRow) title += $", row {selectedRow + 1}";
             Show(OverlayButtonEditor.CreatePicker(theme, buttons, group?.ButtonIds ?? [],
-                (source, independent) => Save(independent ? OverlayButtonAction.MakeIndependent : OverlayButtonAction.Link, source),
-                () => ShowEditor(null), title));
+                source => Save(OverlayButtonAction.Link, source), () => ShowEditor(null), title));
             return;
         }
         if (group?.ButtonIds.Contains(buttonId) != true) throw new InvalidDataException("This placement has changed. Open it again.");
@@ -78,9 +75,18 @@ public partial class SpellOverlayManagerWindow
     }
 
     private static bool SameColumnLayout(SpellDockGroup? current, SpellDockGroup? original) =>
-        ReferenceEquals(current, original) || (current is not null && original is not null && current.Id == original.Id
-            && current.Columns == original.Columns && current.Layout.SequenceEqual(original.Layout)
-            && ButtonColumns.Names(current.ColumnNames, current.Columns).SequenceEqual(ButtonColumns.Names(original.ColumnNames, original.Columns)));
+        ReferenceEquals(current, original) || (current is not null && original is not null && current.HasSameColumnLayout(original));
+
+    private static bool SameDockGroups(SpellDockGroup[]? draft, SpellDockGroup[]? saved)
+    {
+        if (ReferenceEquals(draft, saved)) return true;
+        draft ??= [];
+        saved ??= [];
+        return draft.Length == saved.Length && draft.Zip(saved).All(pair =>
+            ReferenceEquals(pair.First, pair.Second) || (pair.First.Name == pair.Second.Name
+                && pair.First.Scale == pair.Second.Scale && pair.First.ButtonIds.SequenceEqual(pair.Second.ButtonIds)
+                && pair.First.HasSameColumnLayout(pair.Second)));
+    }
 
     private SpellOverlayDefinition EditableBar(SpellOverlayWindow owner, string overlayId)
     {
@@ -102,14 +108,13 @@ public partial class SpellOverlayManagerWindow
         if (change.Action == OverlayButtonAction.EditSynced && change.Source is { } source && setup?.HasPendingButtonEdit(source.Value.Id) == true)
             throw new InvalidOperationException("Finish the pending edits to this button in Settings before updating its shared shortcuts.");
         int index = definitions.ToList().FindIndex(d => d.Id == overlayId);
-        if (index < 0 || !(definitions[index].DockGroups ?? []).SequenceEqual(bar.DockGroups ?? []))
+        if (index < 0 || !SameDockGroups(definitions[index].DockGroups, bar.DockGroups))
             throw new IOException("Finish the pending group changes in Settings, then reopen this button.");
 
         var result = SpellOverlayButtonEditing.Save(profile, path, savedLibrary, savedBytes, overlayId, change);
         savedBytes = result.Bytes; savedLibrary = result.Library;
         var latest = savedLibrary.Overlays.Single(d => d.Id == overlayId);
-        // The edit has committed. A subsequent display error must not offer a
-        // retry that would create another independent button.
+        // The edit is already on disk. Refresh the display if reconciliation fails.
         try
         {
             var editorDraft = definitions[index] with { DockGroups = latest.DockGroups };
@@ -125,7 +130,7 @@ public partial class SpellOverlayManagerWindow
             dockReadGeneration++;
             savedDockButtons = allButtons;
             dockLibraryError = null;
-            if (change.Action is OverlayButtonAction.Create or OverlayButtonAction.MakeIndependent or OverlayButtonAction.EditSynced)
+            if (change.Action is OverlayButtonAction.Create or OverlayButtonAction.EditSynced)
             {
                 setup?.ObserveSavedOverlayButton(allButtons.Single(b => b.Value.Id == result.ButtonId));
                 AppInputSession.UpdateSavedConfiguration(profile, team, allButtons, preserveClearedHotkeys: true);
